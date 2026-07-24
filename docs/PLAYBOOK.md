@@ -88,8 +88,8 @@ Load config from `config/strategy.yaml` first — never hardcode parameters.
 
 Cadence: while ANY position is open, wake **every minute**
 (`send_later` with `delay_minutes: 1` — schedule the next wake first thing on each
-wake so a slow turn never breaks the chain). When flat, drop to
-`interval_flat_minutes` for signal re-checks. On each wake, for every open position:
+wake so a slow turn never breaks the chain). When flat, keep the same 1-minute
+cadence for signal re-checks (`interval_flat_minutes`). On each wake, for every open position:
 1. `get_option_positions` (nonzero) + `get_option_quotes` on held contracts;
    `get_option_orders` to confirm each position's stop is still working.
 2. Stop filled → journal exit P&L. If time < `entry_latest`, entries used <

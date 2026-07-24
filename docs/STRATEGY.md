@@ -77,8 +77,8 @@ Skip the entire day, journaling the reason, when any of:
 
 ## Exit rules (first hit wins)
 
-Exits are evaluated per position, on a **1-minute monitoring cadence** while
-anything is open (`monitoring.interval_open_minutes`).
+Exits are evaluated per position, on a **1-minute monitoring cadence** — both while
+positions are open and while flat (signal re-checks), per `monitoring:`.
 
 | Exit | Mechanism |
 |---|---|
@@ -97,9 +97,9 @@ good-faith-violation rule).
 - Account: Robinhood cash account (no margin, no PDT restrictions, but T+1 settlement
   on option sale proceeds — hence the proceeds-reuse rule).
 - Default budget: $500 premium per position (user rule: single position < $500), up
-  to 3 concurrent positions (one per symbol), $1,500 combined premium, 4 entries/day.
-  Worst normal day with 4 full stops ≈ −$600, which is also the `daily_loss_halt`
-  cap (~5% of the account's $11.6k).
+  to 3 concurrent positions (one per symbol), $1,500 combined premium, 6 entries/day.
+  Worst normal day with 6 full stops ≈ −$900, which is also the `daily_loss_halt`
+  cap (~7.8% of the account's $11.6k).
 - Agentic API is single-leg only: long calls and long puts. No spreads, no shorts.
 
 ## Known failure modes (accepted)

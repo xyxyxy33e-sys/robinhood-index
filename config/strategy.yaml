@@ -35,8 +35,8 @@ risk:
   max_premium_per_trade_usd: 500   # max premium outlay on one position (user rule: single position < $500)
   max_concurrent_positions: 3      # one per universe symbol at a time
   max_total_premium_usd: 1500      # cap on combined premium across open positions
-  max_trades_per_day: 4
-  daily_loss_halt_usd: 600         # stop trading for the day once realized losses reach this
+  max_trades_per_day: 6
+  daily_loss_halt_usd: 900         # scaled with entries: 6 entries x $150 (a full 30% stop) = $900
   stop_loss_pct: 30                # core rule: close the position at a 30% loss
   stop_trigger_frac: 0.72          # resting stop triggers at 72% of fill (-28%, margin for slippage)
   stop_limit_frac: 0.65            # stop's limit floor at 65% of fill (-35% worst case)
@@ -44,7 +44,7 @@ risk:
 
 monitoring:
   interval_open_minutes: 1    # wake every minute while any position is open
-  interval_flat_minutes: 3    # cadence when flat (signal re-checks until entry_latest)
+  interval_flat_minutes: 1    # signal re-checks every minute when flat, same as when open
 
 contract:
   min_premium: 0.15         # skip contracts under $0.15/share — fills are spread-dominated (backtest finding)
