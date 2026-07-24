@@ -102,6 +102,7 @@ positions are open and while flat (signal re-checks), per `monitoring:`.
 | +60% take-profit | Checked every minute during market hours. If mid ≥ 160% of fill: cancel the stop, sell at bid-pegged limit, then confirm flat. (Not resting — Robinhood allows only one working sell against a position.) |
 | Time stop | Exit by 13:30 ET on the 3rd trading day after entry (`max_hold_trading_days`). |
 | DTE floor | Exit immediately if the contract reaches `min_dte_at_exit` (3 DTE), whichever comes first — this keeps the position out of the theta cliff and out of 0DTE entirely. |
+| *(diagnostic)* Signal decay | **Not an exit.** While a position is open, the session logs when the entry thesis dies (\|score\| < 20 or sign flip) and what an exit there would have realised, then keeps logging until the real exit. A June test on 4 affected trades improved the month from +$261 to +$598 — promising, but 4 trades, with 80% of the gain resting on one within-bar timing call, and 30-min checkpoints cannot model the live 1-minute cadence. Journaled to build forward evidence; see `logs/backtest/signal_decay_test.md`. |
 | Daily loss halt | Realized loss on a calendar day ≥ `daily_loss_halt_usd` → no further entries that day, and close any position still open. **Ordering rule (previously ambiguous):** the resting stop is a live server-side order — if it fills, that fill is the exit. The halt only force-closes positions still open at the moment it triggers. |
 
 Re-entries (up to `max_trades_per_day` total entries) are allowed after an exit if

@@ -26,6 +26,14 @@ stops --fill AVG_FILL [--config ...]
     Stop trigger and take-profit prices for a filled long option. The stop is a
     stop-MARKET order, so there is no limit floor to compute.
 
+decay --entry-score X --current-score Y [--floor 20]
+    Signal-decay check for an OPEN position: has the thesis that justified the entry
+    died? Triggers when |current| < floor (default 20, half the entry threshold) OR
+    the sign flipped vs entry. DIAGNOSTIC ONLY during dry-run — it is journaled, not
+    acted on. Evidence so far is 4 trades (logs/backtest/signal_decay_test.md), far
+    too thin to gate exits, and 30-min backtest checkpoints cannot model the live
+    1-minute cadence.
+
 rvol --closes C1,C2,C3,...
     Annualised close-to-close realised volatility (%) over trailing 5/10/20-day
     windows, from daily closes in chronological order (oldest first). Pair with a
@@ -175,6 +183,25 @@ def cmd_size(args):
     }, indent=2))
 
 
+def cmd_decay(args):
+    e, c, floor = args.entry_score, args.current_score, args.floor
+    flipped = (e > 0 and c < 0) or (e < 0 and c > 0)
+    faded = abs(c) < floor
+    reasons = []
+    if flipped:
+        reasons.append("sign_flip")
+    if faded:
+        reasons.append(f"|score| {abs(c):.1f} < floor {floor}")
+    print(json.dumps({
+        "entry_score": e,
+        "current_score": c,
+        "retained_pct": round(abs(c) / abs(e) * 100, 1) if e else None,
+        "triggered": bool(flipped or faded),
+        "reasons": reasons,
+        "note": "DIAGNOSTIC ONLY - journal it, do not act on it",
+    }, indent=2))
+
+
 def cmd_rvol(args):
     closes = [float(x) for x in args.closes.replace(" ", "").split(",") if x]
     if len(closes) < 6:
@@ -217,6 +244,12 @@ def main():
     s.add_argument("--price", type=float, required=True, help="ask, per share")
     s.add_argument("--budget", type=float, required=True)
     s.set_defaults(fn=cmd_size)
+
+    s = sub.add_parser("decay")
+    s.add_argument("--entry-score", type=float, required=True, dest="entry_score")
+    s.add_argument("--current-score", type=float, required=True, dest="current_score")
+    s.add_argument("--floor", type=float, default=20.0)
+    s.set_defaults(fn=cmd_decay)
 
     s = sub.add_parser("rvol")
     s.add_argument("--closes", required=True,

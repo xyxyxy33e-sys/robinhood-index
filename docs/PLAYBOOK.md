@@ -130,7 +130,20 @@ cadence for signal re-checks (`interval_flat_minutes`). On each wake, for every 
 5. Realized P&L for the calendar day ≤ −`daily_loss_halt_usd` → no further entries
    today, and close any position still open. Ordering: a resting stop that already
    filled IS the exit; the halt only closes what is still open when it trips.
-6. Journal one status line per wake only when something changed (fill, exit, stop
+6. **Signal-decay diagnostic (record, never act).** While a position is open,
+   recompute the held symbol's score each wake and run
+   `python3 scripts/strategy_calc.py decay --entry-score <at entry> --current-score <now>`.
+   - Log the FIRST wake where it triggers: time, entry score, current score,
+     retained %, reason, and the option's mid at that instant (i.e. what an exit
+     there would have realised).
+   - **Then keep logging it every ~10 min until the position actually closes.** The
+     open question is whether exiting on decay is premature — whether the score and
+     the position recover after the trigger. Only the post-trigger path answers that,
+     so a single trigger row is not enough.
+   - This must NOT change any exit decision. The −30% stop, +60% target, time stop
+     and DTE floor remain the only real exits.
+   - Rationale and current (thin) evidence: `logs/backtest/signal_decay_test.md`.
+7. Journal one status line per wake only when something changed (fill, exit, stop
    re-placed) or every 10th wake otherwise — a full 3-hour minute-cadence log of
    "no change" lines drowns the journal.
 
@@ -170,6 +183,10 @@ VIX: X · rv5: X% · rv10: X% · rv20: X%
 | time | SPY | QQQ | IWM | market | note |
 ## Volatility snapshot per signal (diagnostic — does not gate entries)
 | time | contract | taken? | IV | rv10 | IV/RV | delta | theta | vega | outcome |
+## Signal-decay tracking (diagnostic — does not gate exits)
+| time | contract | entry score | score now | retained % | triggered | option mid | hypothetical P&L if exited here |
+(first trigger, then every ~10 min until the position actually closes — the
+post-trigger path is what tells us whether decay exits are premature)
 ## Trades
 | # | contract | qty | fill | stop id | exit | exit px | P&L | reason |
 ## End of day
