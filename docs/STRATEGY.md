@@ -54,10 +54,11 @@ Skip the entire day, journaling the reason, when any of:
 
 ## Entry rules
 
-1. Time gate: `entry_earliest` (09:50) ≤ now ≤ 11:30 ET. (Raised from 9:45 after the
-   Jul-13→24 backtest: 9:45 entries repeatedly fired at the morning extreme. Five
-   extra minutes de-qualified the marginal ones while keeping the strong signals;
-   10:00 was also tested and gave up more winners than it saved losers.)
+1. Time gate: `entry_earliest` (09:45) ≤ now ≤ 11:30 ET. 9:35, 9:45, 9:50 and 10:00
+   were all backtested over Jul-13→24; the P&L spread between them was inside noise,
+   so this is a judgment call, not an optimum. **9:35 is the one setting ruled out on
+   mechanism**: with a single 5-min bar, `drive` and `range_position` measure noise and
+   flip sign within 15 minutes.
 2. Signal gate, per symbol: |symbol score| ≥ `entry_threshold` (40). Every qualifying
    symbol is a candidate — calls and puts may be held simultaneously.
 3. Direction per symbol: score > 0 → **call**, score < 0 → **put**. At most one open

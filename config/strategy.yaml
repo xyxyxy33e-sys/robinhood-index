@@ -16,7 +16,9 @@ universe: [SPY, QQQ, IWM]
 schedule:            # all times US/Eastern
   sentiment_start: "09:00"
   market_open: "09:30"
-  entry_earliest: "09:50"   # 5-min confirmation filters marginal morning-extreme signals (backtest 07/13-07/24)
+  entry_earliest: "09:45"   # owner's choice. Backtest 07/13-07/24 across 9:35/9:45/9:50/10:00
+                            # was inconclusive (spread was noise); 9:35 is the one ruled OUT
+                            # structurally — one bar makes drive/range_pos pure noise.
   entry_latest: "11:30"     # no new risk after this — trades need room before the hard close
   hard_close_start: "13:00"
   hard_close_deadline: "13:30"
