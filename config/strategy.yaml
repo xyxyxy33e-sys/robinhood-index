@@ -36,9 +36,8 @@ risk:
   max_concurrent_positions: 3      # one per universe symbol at a time
   max_total_premium_usd: 3000      # cap on combined premium across open positions (3 x per-position)
   max_trades_per_day: 6
-  daily_loss_halt_usd: 900         # NOT scaled with the 2x position size: a full stop is now
-                                   # ~$300, so this halts the day after ~3 losers, not 6.
-                                   # Set to 1800 to keep the old 6-full-stops behaviour.
+  daily_loss_halt_usd: 1000        # ~3.3 full stops at $1,000 sizing (a full stop is ~$300),
+                                   # so the halt binds well before the 6-entry cap.
   stop_loss_pct: 30                # core rule: close the position at a 30% loss
   stop_trigger_frac: 0.72          # resting stop triggers at 72% of fill (-28%, margin for slippage)
   # No limit floor: the resting stop is a stop-MARKET order. A stop-limit can gap

@@ -79,5 +79,5 @@ will start at 8:00 ET.
 decay is brutal, and a 100% loss of premium on any given trade is a normal outcome.
 The 30% stop-loss bounds per-trade damage but, being a market order once triggered,
 gaps/slippage can exceed it. At current settings up to $3,000 of premium can be at
-risk simultaneously and the day halts at $900 of realized losses. Only fund this
+risk simultaneously and the day halts at $1,000 of realized losses. Only fund this
 strategy with money you can afford to lose entirely.

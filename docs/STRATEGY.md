@@ -99,9 +99,9 @@ good-faith-violation rule).
   on option sale proceeds — hence the proceeds-reuse rule).
 - Default budget: $1,000 premium per position, up to 3 concurrent positions (one per
   symbol), $3,000 combined premium, 6 entries/day. A full 30% stop is now ≈ −$300, so
-  the `daily_loss_halt` of $900 binds first — the day ends after roughly 3 full stops,
-  not 6. Max premium at risk at any instant is $3,000 (~26% of the account's $11.6k);
-  max realized loss per day is the $900 halt (~7.8%).
+  the `daily_loss_halt` of $1,000 binds first — the day ends after roughly 3 full
+  stops, not 6. Max premium at risk at any instant is $3,000 (~26% of the account's
+  $11.6k); max realized loss per day is the $1,000 halt (~8.6%).
 - Agentic API is single-leg only: long calls and long puts. No spreads, no shorts.
 
 ## Known failure modes (accepted)
