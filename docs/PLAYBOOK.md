@@ -51,11 +51,15 @@ Load config from `config/strategy.yaml` first — never hardcode parameters.
 
 ## Phase 3 — Entry decision (9:45, re-checks until 11:30)
 
-1. Compute final score. Gate: |market score| ≥ `entry_threshold` AND agreement rule
-   satisfied AND no news veto.
-   - Not met → schedule re-checks every 15 min until `entry_latest` (11:30); each
-     re-check repeats this phase. After 11:30 → Phase 4 (monitor-only).
-2. Pick instrument + direction per STRATEGY.md. Then:
+1. Compute final scores. The `signal.entries` list from `strategy_calc.py score`
+   holds every symbol whose |score| ≥ `entry_threshold` (strongest first), each with
+   its own direction — calls and puts may be opened simultaneously. Apply the news
+   veto, then open positions in list order until `max_concurrent_positions` (one per
+   symbol) or `max_total_premium_usd` is hit.
+   - Empty list → schedule re-checks every `interval_flat_minutes` until
+     `entry_latest` (11:30); each re-check repeats this phase. After 11:30 →
+     Phase 4 (monitor-only).
+2. For each entry candidate:
    a. `get_option_chains` (symbol) → chain id; confirm today ∈ expiration_dates.
    b. `get_option_instruments` (chain_id, expiration_dates=today, type=call|put)
       → strikes bracketing spot.
@@ -81,18 +85,24 @@ Load config from `config/strategy.yaml` first — never hardcode parameters.
 
 ## Phase 4 — Monitoring loop (entry → 12:45)
 
-Wake every ~10 min via `send_later`. On each wake:
+Cadence: while ANY position is open, wake **every minute**
+(`send_later` with `delay_minutes: 1` — schedule the next wake first thing on each
+wake so a slow turn never breaks the chain). When flat, drop to
+`interval_flat_minutes` for signal re-checks. On each wake, for every open position:
 1. `get_option_positions` (nonzero) + `get_option_quotes` on held contracts;
-   `get_option_orders` to confirm the stop is still working.
-2. Stop filled → journal exit P&L. If time < `entry_latest` and trades used <
-   `max_trades_per_day`: re-run Phase 3 re-check (funded from settled cash only).
-3. Mid ≥ take-profit level → cancel stop (`cancel_option_order`), sell at bid-pegged
-   limit, confirm fill, journal.
+   `get_option_orders` to confirm each position's stop is still working.
+2. Stop filled → journal exit P&L. If time < `entry_latest`, entries used <
+   `max_trades_per_day`, and caps permit: re-run Phase 3 re-check (funded from
+   settled cash only).
+3. Mid ≥ take-profit level → cancel that position's stop (`cancel_option_order`),
+   sell at bid-pegged limit, confirm fill, journal.
 4. Safety net: position open but **no working stop** (cancelled/rejected/expired) and
    mid ≤ stop trigger → sell immediately at marketable limit; else re-place the stop.
 5. Realized day P&L ≤ −`daily_loss_halt_usd` → close everything now, no re-entry,
    journal "DAILY HALT".
-6. Journal a one-line status each wake (time, mids, P&L, open orders).
+6. Journal one status line per wake only when something changed (fill, exit, stop
+   re-placed) or every 10th wake otherwise — a full 3-hour minute-cadence log of
+   "no change" lines drowns the journal.
 
 ## Phase 5 — Hard close (12:45 → 13:00)
 

@@ -13,9 +13,9 @@ on index ETFs — **SPY, QQQ, IWM** — through the Robinhood agentic account.
 |---|---|
 | 9:00 | Scheduled session starts; begins tracking market sentiment minute-by-minute (pre-market bars, overnight gap, news) |
 | 9:30 | Market opens; session watches the opening drive (no entries yet — first 15 min is noise) |
-| 9:45–11:30 | Entry window: if the composite sentiment score crosses the threshold, buy a 0DTE call (bullish) or put (bearish) on the strongest/weakest index |
-| immediately after fill | Resting stop-limit order placed at ~30% below entry (the stop-loss the strategy is built around) |
-| every ~10 min | Monitor positions: take-profit check, stop verification, re-entry evaluation |
+| 9:45–11:30 | Entry window: every index whose sentiment score clears the threshold gets a 0DTE call (bullish) or put (bearish) — up to 3 concurrent positions, mixed directions allowed, < $500 premium each |
+| immediately after each fill | Resting stop-limit order placed at ~30% below entry (the stop-loss the strategy is built around) |
+| every minute (positions open) | Monitor positions: take-profit check, stop verification, re-entry evaluation |
 | 12:45–13:00 | **Hard close**: cancel resting orders, close all positions with marketable limits, verify flat |
 | 13:10 | Independent failsafe session double-checks the account is flat and force-closes anything left |
 

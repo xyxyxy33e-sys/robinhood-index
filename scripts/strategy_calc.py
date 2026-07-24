@@ -42,7 +42,6 @@ DEFAULTS = {
     "entry_threshold": 40.0,
     "gap_limit_pct": 1.5,
     "vix_max": 30.0,
-    "min_agreement": 2,
     "stop_trigger_frac": 0.72,
     "stop_limit_frac": 0.65,
     "take_profit_pct": 60.0,
@@ -129,11 +128,7 @@ def cmd_score(args):
         per_symbol[sym] = score_symbol(payload["prior_close"], payload["bars"])
 
     scores = [s["score"] for s in per_symbol.values()]
-    market = sum(scores) / len(scores) if scores else 0.0
-    agree = sum(1 for s in scores if s * market > 0)
-    penalized = agree < int(cfg["min_agreement"]) and market != 0
-    if penalized:
-        market *= 0.6
+    market = round(sum(scores) / len(scores), 1) if scores else 0.0
 
     regime = []
     spy = per_symbol.get("SPY", {}).get("detail", {})
@@ -143,24 +138,22 @@ def cmd_score(args):
     if vix is not None and vix > cfg["vix_max"]:
         regime.append(f"VIX {vix} above {cfg['vix_max']}")
 
-    market = round(market, 1)
-    tradeable = not regime and abs(market) >= cfg["entry_threshold"]
-    direction = "call" if market > 0 else "put" if market < 0 else None
-    pick = None
-    if tradeable:
-        aligned = {s: v["score"] for s, v in per_symbol.items() if v["score"] * market > 0}
-        if aligned:
-            pick = max(aligned, key=lambda s: abs(aligned[s]))
+    # Each symbol qualifies independently in its own direction; mixed calls/puts allowed.
+    entries = []
+    if not regime:
+        for sym, val in per_symbol.items():
+            if abs(val["score"]) >= cfg["entry_threshold"]:
+                entries.append({"instrument": sym,
+                                "direction": "call" if val["score"] > 0 else "put",
+                                "score": val["score"]})
+        entries.sort(key=lambda e: -abs(e["score"]))
 
     print(json.dumps({
         "per_symbol": per_symbol,
         "market_score": market,
-        "agreement": agree,
-        "agreement_penalty_applied": penalized,
         "regime_blocks": regime,
         "entry_threshold": cfg["entry_threshold"],
-        "signal": {"tradeable": tradeable, "direction": direction if tradeable else None,
-                   "instrument": pick},
+        "signal": {"tradeable": bool(entries), "entries": entries},
     }, indent=2))
 
 

@@ -23,20 +23,26 @@ schedule:            # all times US/Eastern
   failsafe_check: "13:10"
 
 signal:
-  entry_threshold: 40       # |composite score| needed to trade (score range -100..+100)
+  entry_threshold: 40       # |symbol score| needed to trade that symbol (score range -100..+100)
   gap_limit_pct: 1.5        # skip the day if overnight gap exceeds this (unstable regime)
   vix_max: 30               # skip the day if VIX is above this
-  min_agreement: 2          # at least 2 of 3 universe symbols must agree on direction
+  per_symbol_entries: true  # each universe symbol qualifies independently, in its own direction
+  allow_mixed_directions: true  # calls and puts may be held simultaneously (e.g. SPY call + IWM put)
 
 risk:
-  max_premium_per_trade_usd: 400   # max total premium outlay on one entry
-  max_trades_per_day: 2
-  max_concurrent_positions: 1
-  daily_loss_halt_usd: 350         # stop trading for the day once realized losses reach this
+  max_premium_per_trade_usd: 500   # max premium outlay on one position (user rule: single position < $500)
+  max_concurrent_positions: 3      # one per universe symbol at a time
+  max_total_premium_usd: 1500      # cap on combined premium across open positions
+  max_trades_per_day: 4
+  daily_loss_halt_usd: 600         # stop trading for the day once realized losses reach this
   stop_loss_pct: 30                # core rule: close the position at a 30% loss
   stop_trigger_frac: 0.72          # resting stop triggers at 72% of fill (-28%, margin for slippage)
   stop_limit_frac: 0.65            # stop's limit floor at 65% of fill (-35% worst case)
   take_profit_pct: 60              # monitored (not resting — one working sell order at a time)
+
+monitoring:
+  interval_open_minutes: 1    # wake every minute while any position is open
+  interval_flat_minutes: 10   # slower cadence when flat (signal re-checks until entry_latest)
 
 contract:
   target_delta_min: 0.35    # slightly OTM; balances cost vs responsiveness

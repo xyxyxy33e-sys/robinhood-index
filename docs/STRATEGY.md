@@ -34,9 +34,10 @@ symbol. Components (weights in parentheses):
 | Range position (15) | where price sits in the day's high-low range, rescaled to ±1 | — |
 
 Each component is `clamp(x / full_scale, −1, +1) × weight`; the symbol score is the
-sum. The **market score** is the mean across the universe. If fewer than
-`min_agreement` symbols share the market score's sign, the market score is scaled by
-0.6 (disagreement penalty).
+sum. The **market score** (mean across the universe) is journaled for context, but
+entries are decided per symbol: each universe symbol whose |score| clears the
+threshold qualifies independently, in its own direction. Divergent books (e.g. SPY
+call + IWM put on a large-cap/small-cap split day) are allowed.
 
 Qualitative overlay: the session also pulls headline news (`co-invest get_news`) at
 9:00. News does not move the numeric score; it can only *veto* a trade (e.g., FOMC
@@ -54,37 +55,45 @@ Skip the entire day, journaling the reason, when any of:
 ## Entry rules
 
 1. Time gate: 9:45 ≤ now ≤ 11:30 ET.
-2. Signal gate: |market score| ≥ `entry_threshold` (40).
-3. Instrument: the universe symbol with the largest |symbol score| whose sign matches
-   the market score. Direction: score > 0 → **call**, score < 0 → **put**.
+2. Signal gate, per symbol: |symbol score| ≥ `entry_threshold` (40). Every qualifying
+   symbol is a candidate — calls and puts may be held simultaneously.
+3. Direction per symbol: score > 0 → **call**, score < 0 → **put**. At most one open
+   position per symbol at a time; open candidates in order of |score| until
+   `max_concurrent_positions` or `max_total_premium_usd` is reached.
 4. Contract: today's expiration, delta in [0.35, 0.45] (slightly OTM), bid/ask spread
    ≤ 10% of mid, open interest ≥ 500, volume ≥ 100.
-5. Size: `floor(max_premium_per_trade / (ask × 100))` contracts, minimum 1 — but skip
-   the trade if even 1 contract exceeds the premium budget or remaining settled cash.
+5. Size per position: `floor(max_premium_per_trade / (ask × 100))` contracts, minimum
+   1 — skip the symbol if even 1 contract exceeds the per-position budget ($500), the
+   combined-premium cap, or remaining settled cash.
 6. Order: limit buy at the mid, rounded up one tick; if unfilled after 2 minutes,
    re-peg to the ask once; if still unfilled after 2 more minutes, cancel and
    re-evaluate the signal from scratch.
 
 ## Exit rules (first hit wins)
 
+Exits are evaluated per position, on a **1-minute monitoring cadence** while
+anything is open (`monitoring.interval_open_minutes`).
+
 | Exit | Mechanism |
 |---|---|
-| −30% stop | Resting stop-limit sell placed immediately after entry fill: trigger at 72% of fill price, limit at 65%. Server-side — survives even if the session dies. |
-| +60% take-profit | Checked on each monitor wake (~10 min). If mid ≥ 160% of fill: cancel the stop, sell at bid-pegged limit. (Not resting — Robinhood allows only one working sell against the position.) |
+| −30% stop | Resting stop-limit sell placed immediately after entry fill: trigger at 72% of fill price, limit at 65%. Server-side — survives even if the session dies; the 1-min loop is the backup, not the primary. |
+| +60% take-profit | Checked every minute. If mid ≥ 160% of fill: cancel the stop, sell at bid-pegged limit. (Not resting — Robinhood allows only one working sell against a position.) |
 | 13:00 hard close | Starting 12:45: cancel resting stops, sell everything with marketable limits (bid − 1 tick), confirm fills, retry until flat. |
 | Daily loss halt | Realized day loss ≥ `daily_loss_halt_usd` → close everything, no re-entry. |
 
-A second entry (up to `max_trades_per_day`) is allowed only if the first position was
-closed, the time gate still holds, the signal re-qualifies, and it is funded from
-still-settled cash (never same-day sale proceeds — good-faith-violation rule).
+Re-entries (up to `max_trades_per_day` total entries) are allowed after an exit if
+the time gate still holds, the symbol re-qualifies, concurrency/premium caps permit,
+and the trade is funded from still-settled cash (never same-day sale proceeds —
+good-faith-violation rule).
 
 ## Sizing & account constraints
 
 - Account: Robinhood cash account (no margin, no PDT restrictions, but T+1 settlement
   on option sale proceeds — hence the proceeds-reuse rule).
-- Default budget: $400 premium per trade, 2 trades/day max ⇒ worst normal day ≈
-  −$240 (two full stops); `daily_loss_halt` caps pathological slippage days at −$350.
-  ~3% of the account's $11.6k, sized so a losing streak is survivable.
+- Default budget: $500 premium per position (user rule: single position < $500), up
+  to 3 concurrent positions (one per symbol), $1,500 combined premium, 4 entries/day.
+  Worst normal day with 4 full stops ≈ −$600, which is also the `daily_loss_halt`
+  cap (~5% of the account's $11.6k).
 - Agentic API is single-leg only: long calls and long puts. No spreads, no shorts.
 
 ## Known failure modes (accepted)
