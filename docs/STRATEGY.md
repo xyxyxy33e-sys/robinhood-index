@@ -46,6 +46,15 @@ entries are decided per symbol: each universe symbol whose |score| clears the
 threshold qualifies independently, in its own direction. Divergent books (e.g. SPY
 call + IWM put on a large-cap/small-cap split day) are allowed.
 
+**Volatility is recorded but does NOT gate entries (yet).** The strategy is long
+premium, so buying when implied vol sits far above what the underlying is actually
+realising is a structural headwind — the same mispricing that premium *sellers* try
+to harvest. Historical IV is not available through the Robinhood tools, so this
+cannot be backtested; instead every signal's IV, greeks and IV/RV ratio are journaled
+during dry-run, so the hypothesis can be tested on genuine forward data before any
+rule is added. See `logs/backtest/trend_filter_test.md` for why an externally-sourced
+filter should be measured before being adopted.
+
 Qualitative overlay: the session also pulls headline news (`co-invest get_news`) at
 9:00. News does not move the numeric score; it can only *veto* a trade (e.g., FOMC
 decision day at 14:00, CPI print at 8:30 that whipsawed futures) — the veto and

@@ -38,6 +38,11 @@ Load config from `config/strategy.yaml` first — never hardcode parameters.
    `start_time=<09:00 ET today in UTC>`. Each poll returns the full minute-by-minute
    tape since 9:00, so polling every ~7 min (wake via `send_later`, e.g. 9:07, 9:14,
    9:21, 9:28) yields complete per-minute coverage without a wake per minute.
+2b. **Volatility baseline (record every day, traded or not).** Fetch 21 daily SPY
+   closes (`get_equity_historicals`, interval=day, ~30 calendar days back) and run
+   `python3 scripts/strategy_calc.py rvol --closes "<oldest,...,newest>"`. Record
+   rv5/rv10/rv20 alongside the VIX level from step 1. This is the denominator of the
+   IV/RV ratio.
 3. At ~9:28: write the collected bars + prior closes (`get_equity_quotes` →
    `close.price`) + VIX to `data/YYYY-MM-DD-bars.json` (schema: see script header)
    and run `python3 scripts/strategy_calc.py score --input data/YYYY-MM-DD-bars.json`.
@@ -73,6 +78,15 @@ Load config from `config/strategy.yaml` first — never hardcode parameters.
       strike-offset heuristic does not transfer to 7DTE.
    d. Size: `python3 scripts/strategy_calc.py size --price <ask> --budget <config>`.
       Confirm premium ≤ remaining settled cash.
+   e. **Record the volatility snapshot** from the chosen contract's `get_option_quotes`
+      payload — `implied_volatility`, `delta`, `gamma`, `theta`, `vega`, plus the
+      IV/RV ratio (contract IV ÷ rv10 from Phase 1, both as decimals). Do this for
+      EVERY qualifying signal, including ones not taken because a cap or the premium
+      floor blocked them — the not-taken rows are just as useful for the analysis.
+      **Rationale:** we are long premium, so paying above-realised IV is a structural
+      headwind. Historical IV is not retrievable through these tools, so this forward
+      record is the only way to test whether the ratio predicts outcomes. It is
+      DIAGNOSTIC ONLY — it does not gate entries and must not change any decision.
 3. Place (live mode): `review_option_order` (limit buy, mid rounded up one tick,
    gfd, with `chain_symbol` + `underlying_type` for fees) → inspect alerts; any
    blocking alert → journal and abort the trade. Then `place_option_order` with a
@@ -150,8 +164,12 @@ Positions are NOT flattened. This phase makes them safe to carry overnight.
 mode: <dry_run|live>  |  settled cash at open: $X  |  VIX: X
 ## Regime
 gap SPY: X% · news veto: none|<reason> · tradeable: yes|no
+## Volatility baseline
+VIX: X · rv5: X% · rv10: X% · rv20: X%
 ## Signal history
 | time | SPY | QQQ | IWM | market | note |
+## Volatility snapshot per signal (diagnostic — does not gate entries)
+| time | contract | taken? | IV | rv10 | IV/RV | delta | theta | vega | outcome |
 ## Trades
 | # | contract | qty | fill | stop id | exit | exit px | P&L | reason |
 ## End of day

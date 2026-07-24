@@ -26,6 +26,14 @@ stops --fill AVG_FILL [--config ...]
     Stop trigger and take-profit prices for a filled long option. The stop is a
     stop-MARKET order, so there is no limit floor to compute.
 
+rvol --closes C1,C2,C3,...
+    Annualised close-to-close realised volatility (%) over trailing 5/10/20-day
+    windows, from daily closes in chronological order (oldest first). Pair with a
+    contract's implied_volatility to get the IV/RV ratio: we are LONG premium, so a
+    high ratio means we are paying up for movement the underlying has not been
+    delivering. Recorded at every signal so the hypothesis can be tested on live
+    forward data — historical IV is not available through the Robinhood tools.
+
 Stdlib only. Output is JSON on stdout.
 """
 
@@ -167,6 +175,25 @@ def cmd_size(args):
     }, indent=2))
 
 
+def cmd_rvol(args):
+    closes = [float(x) for x in args.closes.replace(" ", "").split(",") if x]
+    if len(closes) < 6:
+        print(json.dumps({"error": "need at least 6 closes"})); return
+    rets = [math.log(closes[i] / closes[i - 1]) for i in range(1, len(closes))]
+
+    def ann(n):
+        w = rets[-n:]
+        if len(w) < n:
+            return None
+        mean = sum(w) / len(w)
+        var = sum((r - mean) ** 2 for r in w) / (len(w) - 1)
+        return round(math.sqrt(var) * math.sqrt(252) * 100, 2)
+
+    out = {f"rv{n}_annualised_pct": ann(n) for n in (5, 10, 20)}
+    out["samples"] = len(rets)
+    print(json.dumps(out, indent=2))
+
+
 def cmd_stops(args):
     cfg = load_config(args.config)
     print(json.dumps({
@@ -190,6 +217,11 @@ def main():
     s.add_argument("--price", type=float, required=True, help="ask, per share")
     s.add_argument("--budget", type=float, required=True)
     s.set_defaults(fn=cmd_size)
+
+    s = sub.add_parser("rvol")
+    s.add_argument("--closes", required=True,
+                   help="comma-separated daily closes, oldest first (>= 21 for rv20)")
+    s.set_defaults(fn=cmd_rvol)
 
     s = sub.add_parser("stops")
     s.add_argument("--fill", type=float, required=True, help="avg fill, per share")
