@@ -23,7 +23,8 @@ size --price ASK --budget USD
     Contracts affordable at ASK (per-share premium) within the budget. 0 = skip.
 
 stops --fill AVG_FILL [--config ...]
-    Stop trigger / stop limit / take-profit prices for a filled long option.
+    Stop trigger and take-profit prices for a filled long option. The stop is a
+    stop-MARKET order, so there is no limit floor to compute.
 
 Stdlib only. Output is JSON on stdout.
 """
@@ -43,7 +44,6 @@ DEFAULTS = {
     "gap_limit_pct": 1.5,
     "vix_max": 30.0,
     "stop_trigger_frac": 0.72,
-    "stop_limit_frac": 0.65,
     "take_profit_pct": 60.0,
 }
 
@@ -171,7 +171,7 @@ def cmd_stops(args):
     cfg = load_config(args.config)
     print(json.dumps({
         "stop_trigger": round(args.fill * cfg["stop_trigger_frac"], 2),
-        "stop_limit": round(args.fill * cfg["stop_limit_frac"], 2),
+        "order_type": "stop_market",
         "take_profit": round(args.fill * (1 + cfg["take_profit_pct"] / 100.0), 2),
         "max_loss_at_trigger_pct": round((1 - cfg["stop_trigger_frac"]) * 100, 1),
     }, indent=2))

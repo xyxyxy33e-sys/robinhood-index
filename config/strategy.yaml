@@ -39,7 +39,9 @@ risk:
   daily_loss_halt_usd: 900         # scaled with entries: 6 entries x $150 (a full 30% stop) = $900
   stop_loss_pct: 30                # core rule: close the position at a 30% loss
   stop_trigger_frac: 0.72          # resting stop triggers at 72% of fill (-28%, margin for slippage)
-  stop_limit_frac: 0.65            # stop's limit floor at 65% of fill (-35% worst case)
+  # No limit floor: the resting stop is a stop-MARKET order. A stop-limit can gap
+  # straight through its floor and never fill, leaving the position unprotected;
+  # stop-market guarantees the exit at an unbounded price. Fill > no fill on 0DTE.
   take_profit_pct: 60              # monitored (not resting — one working sell order at a time)
 
 monitoring:

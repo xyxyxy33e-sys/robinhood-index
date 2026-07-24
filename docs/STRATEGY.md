@@ -14,8 +14,9 @@ options, with strictly bounded downside (30% premium stop) and no exposure past
 - **No entries in the first 15 minutes**: the 9:30–9:45 range is dominated by opening
   auctions and stop-hunting; signals fire on the *resolution* of that range.
 - **30% stop-loss**: a fixed fraction-of-premium stop is the only stop type that works
-  on 0DTE (underlying-based stops are too twitchy given gamma). It caps a single
-  trade's loss at `0.30 × max_premium_per_trade` ≈ $120 at default sizing.
+  on 0DTE (underlying-based stops are too twitchy given gamma). It bounds a single
+  trade's loss near `0.30 × max_premium_per_trade` ≈ $150 at default sizing — "near",
+  not "at", because the stop is a market order once triggered.
 - **Sentiment before signals**: minute-level pre-market tape from 9:00 onward gives
   gap context and directional drift before the open, so the open-drive signal starts
   with a prior instead of reacting cold.
@@ -82,7 +83,7 @@ positions are open and while flat (signal re-checks), per `monitoring:`.
 
 | Exit | Mechanism |
 |---|---|
-| −30% stop | Resting stop-limit sell placed immediately after entry fill: trigger at 72% of fill price, limit at 65%. Server-side — survives even if the session dies; the 1-min loop is the backup, not the primary. |
+| −30% stop | Resting **stop-market** sell placed immediately after entry fill: trigger at 72% of fill (−28%, slippage margin). Server-side — survives even if the session dies; the 1-min loop is the backup, not the primary. No limit floor: a stop-limit can gap through its floor and never fill, and an unfilled stop on a 0DTE is worse than a bad fill. |
 | +60% take-profit | Checked every minute. If mid ≥ 160% of fill: cancel the stop, sell at bid-pegged limit. (Not resting — Robinhood allows only one working sell against a position.) |
 | Hard close | From `hard_close_start` (13:00), deadline `hard_close_deadline` (13:30): cancel resting stops, sell everything with marketable limits (bid − 1 tick), confirm fills, retry until flat. |
 | Daily loss halt | Realized day loss ≥ `daily_loss_halt_usd` → close everything, no re-entry. |
@@ -104,9 +105,10 @@ good-faith-violation rule).
 
 ## Known failure modes (accepted)
 
-- A fast gap through the stop can fill worse than −35% or (rarely) leave the
-  stop-limit unfilled; the monitor loop market-closes any position whose mid is below
-  the stop trigger with no working stop order.
+- A fast gap through the stop fills at an unbounded price — with stop-market the exit
+  is guaranteed but the loss can exceed −30% (this is the accepted trade for never
+  being left holding an unprotected position). The monitor loop still market-closes
+  any position sitting below its trigger with no working stop order.
 - Signals near threshold on chop days will produce stop-outs; the daily halt bounds it.
 - If every session-scheduling mechanism fails simultaneously, the 13:31 failsafe
   routine is the last line; worst case an ITM 0DTE auto-exercises — the hard-close +

@@ -79,9 +79,13 @@ Load config from `config/strategy.yaml` first — never hardcode parameters.
    re-checks. Partial fills count as filled for stop purposes (stop qty = filled qty).
 5. **Immediately after fill** (live mode): place the resting stop —
    `stops` from `python3 scripts/strategy_calc.py stops --fill <avg_fill>`:
-   stop_limit sell-to-close, `stop_price = trigger`, `price = limit_floor`, gfd,
-   fresh `ref_id`. Verify it's working via `get_option_orders`. **A position must
-   never sit without a working stop for more than one monitoring cycle.**
+   **`type: stop_market`**, sell-to-close, `stop_price = stop_trigger`, NO `price`
+   parameter (stop_market rejects one), `time_in_force: gfd`,
+   `market_hours: regular_hours` (stop_market is regular-hours + GFD only), fresh
+   `ref_id`. The API requires `stop_price` below the current ask — true by
+   construction at 72% of fill. Verify it's working via `get_option_orders`.
+   **A position must never sit without a working stop for more than one monitoring
+   cycle.**
 6. Journal: contract, qty, fill, stop order id, score at entry.
 
 ## Phase 4 — Monitoring loop (entry → hard_close_start)
