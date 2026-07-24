@@ -32,11 +32,13 @@ signal:
   allow_mixed_directions: true  # calls and puts may be held simultaneously (e.g. SPY call + IWM put)
 
 risk:
-  max_premium_per_trade_usd: 500   # max premium outlay on one position (user rule: single position < $500)
+  max_premium_per_trade_usd: 1000  # max premium outlay on one position
   max_concurrent_positions: 3      # one per universe symbol at a time
-  max_total_premium_usd: 1500      # cap on combined premium across open positions
+  max_total_premium_usd: 3000      # cap on combined premium across open positions (3 x per-position)
   max_trades_per_day: 6
-  daily_loss_halt_usd: 900         # scaled with entries: 6 entries x $150 (a full 30% stop) = $900
+  daily_loss_halt_usd: 900         # NOT scaled with the 2x position size: a full stop is now
+                                   # ~$300, so this halts the day after ~3 losers, not 6.
+                                   # Set to 1800 to keep the old 6-full-stops behaviour.
   stop_loss_pct: 30                # core rule: close the position at a 30% loss
   stop_trigger_frac: 0.72          # resting stop triggers at 72% of fill (-28%, margin for slippage)
   # No limit floor: the resting stop is a stop-MARKET order. A stop-limit can gap
