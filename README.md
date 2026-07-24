@@ -47,10 +47,16 @@ on index ETFs — **SPY, QQQ, IWM** — through the Robinhood agentic account.
 Two Claude Code routines drive the strategy (created via the Claude Code Remote
 trigger system; cron is evaluated in **UTC**):
 
-| Routine | Cron (UTC) | ET (EDT) | Purpose |
-|---|---|---|---|
-| `0dte-morning-session` | `0 13 * * 1-5` | 9:00 weekdays | Runs `docs/PLAYBOOK.md` end-to-end |
-| `0dte-failsafe-closeout` | `10 17 * * 1-5` | 13:10 weekdays | Verifies flat; force-closes stragglers |
+| Routine | ID | Cron (UTC) | ET (EDT) | Purpose |
+|---|---|---|---|---|
+| `0dte-morning-session` | `trig_0113xQ7waSQKDmJU9QyHqoUC` | `0 13 * * 1-5` | 9:00 weekdays | Runs `docs/PLAYBOOK.md` end-to-end |
+| `0dte-failsafe-closeout` | `trig_01RoDZSx6HvoxA7RdpRCsjiG` | `10 17 * * 1-5` | 13:10 weekdays | Verifies flat; force-closes stragglers |
+
+Both routines fire into the persistent session that created them
+(`session_01LYbUn21tPxhdDr2LoioESx`) because that session holds the Robinhood MCP
+connector — fresh-session routines created via the API run without connectors and
+cannot trade. If that session is ever deleted or loses its connector, recreate the
+routines from the claude.ai routines UI with the Robinhood connector attached.
 
 ⚠️ **DST:** these crons assume Eastern Daylight Time (UTC-4). When clocks fall back
 (early November), shift both crons +1 hour (`0 14 …` and `10 18 …`) or the session
