@@ -14,7 +14,7 @@ on index ETFs — **SPY, QQQ, IWM** — through the Robinhood agentic account.
 | 9:00 | Scheduled session starts; begins tracking market sentiment minute-by-minute (pre-market bars, overnight gap, news) |
 | 9:30 | Market opens; session watches the opening drive (no entries yet — first 15 min is noise) |
 | 9:45–11:30 | Entry window: every index whose sentiment score clears the threshold gets a 0DTE call (bullish) or put (bearish) — up to 3 concurrent positions, mixed directions allowed, ≤ $1,000 premium each |
-| immediately after each fill | Resting stop-limit order placed at ~30% below entry (the stop-loss the strategy is built around) |
+| immediately after each fill | Resting stop-**market** order placed at −28% of fill (the stop-loss the strategy is built around) |
 | every minute (positions open) | Monitor positions: take-profit check, stop verification, re-entry evaluation |
 | 13:00–13:30 | **Hard close**: cancel resting orders, close all positions with marketable limits, verify flat |
 | 13:31 | Independent failsafe session double-checks the account is flat and force-closes anything left |
@@ -30,10 +30,10 @@ on index ETFs — **SPY, QQQ, IWM** — through the Robinhood agentic account.
 
 ## Safety model
 
-1. **`mode: dry_run` is the default.** In dry-run the session does everything —
-   sentiment, signals, contract selection, sizing — and journals the trades it *would*
-   have placed, but never places an order. Flip to `mode: live` in
-   `config/strategy.yaml` to trade real money.
+1. **`mode` in `config/strategy.yaml` governs everything. It is currently `live`.**
+   In `dry_run` the session does everything — sentiment, signals, contract selection,
+   sizing — and journals the trades it *would* have placed, but never places an order.
+   Set it back to `dry_run` to stop trading real money.
 2. Setting `mode: live` is your standing authorization for scheduled sessions to place
    orders **within the limits in `config/strategy.yaml`** without per-order
    confirmation. Review the `risk:` block before flipping it.
@@ -77,5 +77,7 @@ will start at 8:00 ET.
 
 0DTE long options are among the highest-risk instruments retail traders can buy: theta
 decay is brutal, and a 100% loss of premium on any given trade is a normal outcome.
-The 30% stop-loss bounds per-trade damage but gaps/slippage can exceed it. Only fund
-this strategy with money you can afford to lose entirely.
+The 30% stop-loss bounds per-trade damage but, being a market order once triggered,
+gaps/slippage can exceed it. At current settings up to $3,000 of premium can be at
+risk simultaneously and the day halts at $900 of realized losses. Only fund this
+strategy with money you can afford to lose entirely.
