@@ -54,16 +54,17 @@ Skip the entire day, journaling the reason, when any of:
 
 ## Entry rules
 
-1. Time gate: `entry_earliest` (10:00) ≤ now ≤ 11:30 ET. (Raised from 9:45 after the
-   Jul-13→24 backtest: first-checkpoint entries fired at morning extremes and lost
-   net −$523; 10:00+ entries made +$1,854.)
+1. Time gate: `entry_earliest` (09:50) ≤ now ≤ 11:30 ET. (Raised from 9:45 after the
+   Jul-13→24 backtest: 9:45 entries repeatedly fired at the morning extreme. Five
+   extra minutes de-qualified the marginal ones while keeping the strong signals;
+   10:00 was also tested and gave up more winners than it saved losers.)
 2. Signal gate, per symbol: |symbol score| ≥ `entry_threshold` (40). Every qualifying
    symbol is a candidate — calls and puts may be held simultaneously.
 3. Direction per symbol: score > 0 → **call**, score < 0 → **put**. At most one open
    position per symbol at a time; open candidates in order of |score| until
    `max_concurrent_positions` or `max_total_premium_usd` is reached.
 4. Contract: today's expiration, delta in [0.35, 0.45] (slightly OTM), premium ≥
-   `min_premium` ($0.25/share — cheaper contracts are spread-dominated; skip the
+   `min_premium` ($0.15/share — cheaper contracts are spread-dominated; skip the
    entry rather than stepping strikes), bid/ask spread ≤ 10% of mid, open interest
    ≥ 500, volume ≥ 100.
 5. Size per position: `floor(max_premium_per_trade / (ask × 100))` contracts, minimum

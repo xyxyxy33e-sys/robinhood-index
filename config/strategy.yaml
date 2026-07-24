@@ -16,7 +16,7 @@ universe: [SPY, QQQ, IWM]
 schedule:            # all times US/Eastern
   sentiment_start: "09:00"
   market_open: "09:30"
-  entry_earliest: "10:00"   # backtest 07/13-07/24: 9:45 entries went 2-for-10 (-$523); 10:00+ went 12-for-22 (+$1,854)
+  entry_earliest: "09:50"   # 5-min confirmation filters marginal morning-extreme signals (backtest 07/13-07/24)
   entry_latest: "11:30"     # no new risk after this — trades need room before the hard close
   hard_close_start: "13:00"
   hard_close_deadline: "13:30"
@@ -45,7 +45,7 @@ monitoring:
   interval_flat_minutes: 3    # cadence when flat (signal re-checks until entry_latest)
 
 contract:
-  min_premium: 0.25         # skip contracts under $0.25/share — fills are spread-dominated (backtest finding)
+  min_premium: 0.15         # skip contracts under $0.15/share — fills are spread-dominated (backtest finding)
   target_delta_min: 0.35    # slightly OTM; balances cost vs responsiveness
   target_delta_max: 0.45
   max_spread_pct_of_mid: 10 # skip contracts with wide bid/ask

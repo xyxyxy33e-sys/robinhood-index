@@ -49,7 +49,7 @@ Load config from `config/strategy.yaml` first — never hardcode parameters.
    including regular-session bars), re-run the score.
 2. Journal score evolution. No orders in this phase.
 
-## Phase 3 — Entry decision (entry_earliest 10:00, re-checks until 11:30)
+## Phase 3 — Entry decision (entry_earliest 09:50, re-checks until 11:30)
 
 1. Compute final scores. The `signal.entries` list from `strategy_calc.py score`
    holds every symbol whose |score| ≥ `entry_threshold` (strongest first), each with
