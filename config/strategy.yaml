@@ -5,7 +5,7 @@
 # live:    orders are placed automatically within the limits below.
 #          Setting "live" is the account owner's standing authorization for
 #          scheduled agent sessions to trade without per-order confirmation.
-mode: dry_run
+mode: live
 
 account_number: "576391551"   # Robinhood "Agentic" cash account (agentic_allowed=true, option_level_2)
 timezone: America/New_York
@@ -18,14 +18,14 @@ schedule:            # all times US/Eastern
   market_open: "09:30"
   entry_earliest: "09:45"   # skip the first 15 min of open chop
   entry_latest: "11:30"     # no new risk after this — trades need room before the 13:00 close
-  hard_close_start: "12:45"
-  hard_close_deadline: "13:00"
-  failsafe_check: "13:10"
+  hard_close_start: "13:00"
+  hard_close_deadline: "13:30"
+  failsafe_check: "13:31"
 
 signal:
   entry_threshold: 40       # |composite score| needed to trade (score range -100..+100)
   gap_limit_pct: 1.5        # skip the day if overnight gap exceeds this (unstable regime)
-  vix_max: 30               # skip the day if VIX is above this
+  vix_max: 35               # skip the day if VIX is above this
   min_agreement: 2          # at least 2 of 3 universe symbols must agree on direction
 
 risk:
