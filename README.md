@@ -35,10 +35,10 @@ across sessions and exited by stop, target, or time stop.
 
 ## Safety model
 
-1. **`mode` in `config/strategy.yaml` governs everything. It is currently `live`.**
-   In `dry_run` the session does everything — sentiment, signals, contract selection,
-   sizing — and journals the trades it *would* have placed, but never places an order.
-   Set it back to `dry_run` to stop trading real money.
+1. **`mode` in `config/strategy.yaml` governs everything. It is currently `dry_run`.**
+   The session does everything — sentiment, signals, contract selection, sizing — and
+   journals the trades it *would* have placed, but never places, cancels or modifies
+   an order. Set it to `live` to trade real money; read `logs/backtest/` first.
 2. Setting `mode: live` is your standing authorization for scheduled sessions to place
    orders **within the limits in `config/strategy.yaml`** without per-order
    confirmation. Review the `risk:` block before flipping it.
