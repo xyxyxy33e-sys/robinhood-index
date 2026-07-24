@@ -58,6 +58,12 @@ connector — fresh-session routines created via the API run without connectors 
 cannot trade. If that session is ever deleted or loses its connector, recreate the
 routines from the claude.ai routines UI with the Robinhood connector attached.
 
+**Model policy (owner requirement): runs must use Claude Sonnet 5, not Fable 5.**
+Routine fires execute on the bound session's model, so the session above must be
+set to Sonnet 5 in the claude.ai model picker (API-side routine model updates are
+disabled: `model_update_disabled`). If the routines are ever recreated in the
+routines UI, select Sonnet 5 there.
+
 ⚠️ **DST:** these crons assume Eastern Daylight Time (UTC-4). When clocks fall back
 (early November), shift both crons +1 hour (`0 14 …` and `31 18 …`) or the session
 will start at 8:00 ET.
