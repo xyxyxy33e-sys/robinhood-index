@@ -8,7 +8,7 @@ Load config from `config/strategy.yaml` first — never hardcode parameters.
 1. If `mode: dry_run` → never call `place_option_order` / `cancel_option_order`.
    Journal the exact order you *would* have placed instead (contract, qty, price).
 2. Never exceed a `risk:` limit. When any check is ambiguous, don't trade.
-3. Whatever happens, run **Phase 5 (hard close)** and **Phase 6 (journal + push)**.
+3. Whatever happens, run **Phase 5 (EOD verification)** and **Phase 6 (journal + push)**.
 4. Schedule every intra-day pause with `send_later` (claude-code-remote MCP).
    Never use Bash sleep.
 
@@ -22,8 +22,10 @@ Load config from `config/strategy.yaml` first — never hardcode parameters.
 3. Verify via `get_accounts` that the configured account is still
    `agentic_allowed=true` with `option_level_2`+. If not: journal, notify, stop.
 4. `get_portfolio` → record start-of-day settled cash (sizing base).
-5. `get_option_positions` (nonzero) → if yesterday left anything expiring today
-   (should never happen), treat as inherited risk: apply Phase 4 monitoring to it.
+5. `get_option_positions` (nonzero) → **positions carried over from previous sessions
+   are expected now.** For each: confirm a WORKING GTC stop exists (`get_option_orders`,
+   state=queued/confirmed); if not, re-place it immediately. Record entry date and
+   expiration so Phase 4 can apply the time stop and DTE floor.
 6. Create today's journal file `logs/journal/YYYY-MM-DD.md` from the template at the
    bottom of this file.
 
@@ -61,13 +63,14 @@ Load config from `config/strategy.yaml` first — never hardcode parameters.
      Phase 4 (monitor-only).
 2. For each entry candidate:
    a. `get_option_chains` (symbol) → chain id; confirm today ∈ expiration_dates.
-   b. `get_option_instruments` (chain_id, expiration_dates=today, type=call|put)
-      → strikes bracketing spot.
-   c. `get_option_quotes` on the 4–6 candidates nearest the delta band → pick the
-      contract meeting delta/premium-floor/spread/OI/volume rules (skip the entry if
-      the delta-band contract's ask < min_premium; do not step strikes; per config; if the
-      quote payload lacks greeks, approximate: for ~0.35–0.45 delta use the strike
-      1–2 increments OTM from spot).
+   b. Pick the expiration: nearest listed date **>= `dte_target` (7) calendar days**
+      out; if +7 is a weekend/holiday take the next available, never below +6.
+      Then `get_option_instruments` (chain_id, that expiration, type=call|put).
+      NOTE: verify today ∈ expiration_dates is NO LONGER the check — 0DTE is not used.
+   c. `get_option_quotes` on the candidates → pick the contract meeting
+      delta (`target_delta_min`/`max`, 0.45–0.55 at 7DTE) / premium-floor / spread /
+      OI / volume rules. Use the REAL delta from the quote payload; the old 0DTE
+      strike-offset heuristic does not transfer to 7DTE.
    d. Size: `python3 scripts/strategy_calc.py size --price <ask> --budget <config>`.
       Confirm premium ≤ remaining settled cash.
 3. Place (live mode): `review_option_order` (limit buy, mid rounded up one tick,
@@ -80,15 +83,19 @@ Load config from `config/strategy.yaml` first — never hardcode parameters.
 5. **Immediately after fill** (live mode): place the resting stop —
    `stops` from `python3 scripts/strategy_calc.py stops --fill <avg_fill>`:
    **`type: stop_market`**, sell-to-close, `stop_price = stop_trigger`, NO `price`
-   parameter (stop_market rejects one), `time_in_force: gfd`,
-   `market_hours: regular_hours` (stop_market is regular-hours + GFD only), fresh
-   `ref_id`. The API requires `stop_price` below the current ask — true by
-   construction at 72% of fill. Verify it's working via `get_option_orders`.
+   parameter (stop_market rejects one), **`time_in_force: gtc`**,
+   `market_hours: regular_hours`, fresh `ref_id`. The API requires `stop_price` below
+   the current ask — true by construction at 72% of fill. Verify it is working via
+   `get_option_orders`.
+   ⚠️ **`gtc` is mandatory.** With no hard close this stop is the position's only
+   protection; a `gfd` stop expires at 16:00 and leaves it naked overnight. If the
+   broker rejects `gtc` on a stop_market, DO NOT fall back to `gfd` — close the
+   position instead and journal the rejection.
    **A position must never sit without a working stop for more than one monitoring
    cycle.**
 6. Journal: contract, qty, fill, stop order id, score at entry.
 
-## Phase 4 — Monitoring loop (entry → hard_close_start)
+## Phase 4 — Monitoring loop (during market hours)
 
 Cadence: while ANY position is open, wake **every minute**
 (`send_later` with `delay_minutes: 1` — schedule the next wake first thing on each
@@ -99,39 +106,47 @@ cadence for signal re-checks (`interval_flat_minutes`). On each wake, for every 
 2. Stop filled → journal exit P&L. If time < `entry_latest`, entries used <
    `max_trades_per_day`, and caps permit: re-run Phase 3 re-check (funded from
    settled cash only).
+2b. **Time stop / DTE floor:** if the position has been held `max_hold_trading_days`
+   (3) trading days, or the contract has reached `min_dte_at_exit` (3 DTE), close it
+   now — cancel the stop, sell at a bid-pegged limit, re-peg every 2 min until flat.
 3. Mid ≥ take-profit level → cancel that position's stop (`cancel_option_order`),
    sell at bid-pegged limit, confirm fill, journal.
 4. Safety net: position open but **no working stop** (cancelled/rejected/expired) and
    mid ≤ stop trigger → sell immediately at marketable limit; else re-place the stop.
-5. Realized day P&L ≤ −`daily_loss_halt_usd` → close everything now, no re-entry,
-   journal "DAILY HALT".
+5. Realized P&L for the calendar day ≤ −`daily_loss_halt_usd` → no further entries
+   today, and close any position still open. Ordering: a resting stop that already
+   filled IS the exit; the halt only closes what is still open when it trips.
 6. Journal one status line per wake only when something changed (fill, exit, stop
    re-placed) or every 10th wake otherwise — a full 3-hour minute-cadence log of
    "no change" lines drowns the journal.
 
-## Phase 5 — Hard close (hard_close_start 13:00 → deadline 13:30)
+## Phase 5 — End-of-day verification (15:45 ET)
 
-1. At `hard_close_start`: `cancel_option_order` on every working order in the account for today's
-   strategy positions; then sell-to-close every open position, limit at bid − 1 tick.
-2. Poll fills every 2 min; unfilled → re-peg lower. All positions MUST be flat by
-   `hard_close_deadline` (13:30). If a close order rejects repeatedly, keep retrying
-   with wider limits and journal each attempt (the 13:31 failsafe routine is the
-   backstop, not the plan).
-3. Verify: `get_option_positions` (nonzero) returns no strategy positions.
+Positions are NOT flattened. This phase makes them safe to carry overnight.
+1. `get_option_positions` (nonzero). For EVERY open position:
+   a. `get_option_orders` → confirm a stop-market sell exists in a working state
+      (queued/confirmed) with `time_in_force: gtc` and the correct quantity.
+   b. Missing / cancelled / rejected / `gfd` → re-place it as GTC immediately. If it
+      cannot be placed as GTC, CLOSE the position before 16:00 rather than carry it
+      unprotected.
+2. Check the time stop and DTE floor: anything that will breach
+   `min_dte_at_exit` or `max_hold_trading_days` before the next session must be
+   closed now, not next morning.
+3. Journal: open positions, their stop order ids, DTE remaining, days held.
 
-## Phase 6 — Journal & push (right after hard close)
+## Phase 6 — Journal & push (after Phase 5)
 
 1. Complete the journal: fills, P&L (realized, per trade and total), signal history,
    deviations from playbook.
 2. `git add logs/ && git commit` (message: `journal: YYYY-MM-DD <summary>`) and
    `git push -u origin claude/robinhood-day-options-strategy-y8eskp`
    (retry ×4, backoff 2/4/8/16s).
-3. End the session. Do not leave wakes scheduled past the failsafe check time.
+3. End the session. Do not leave wakes scheduled past `failsafe_check`.
 
 ## Journal template
 
 ```markdown
-# 0DTE Journal — YYYY-MM-DD
+# SPY 7DTE Journal — YYYY-MM-DD
 mode: <dry_run|live>  |  settled cash at open: $X  |  VIX: X
 ## Regime
 gap SPY: X% · news veto: none|<reason> · tradeable: yes|no

@@ -3,14 +3,20 @@
 ## Objective
 
 Capture intraday directional moves in the major index ETFs using same-day-expiration
-options, with strictly bounded downside (30% premium stop) and no exposure past
-13:30 ET — before the afternoon theta cliff and power-hour reversals.
+options **expiring ~7 days out**, with bounded downside (30% premium stop) and a
+bounded holding period (3 trading days / 3 DTE floor). Positions are held across
+sessions; there is no intraday flatten.
 
 ## Why these rules
 
-- **0DTE long options** give high convexity on a correct directional call, but decay
-  fastest in the afternoon. Exiting by 13:00 keeps the trade in the window where
-  delta, not theta, dominates P&L. (Close window per config `schedule:`.)
+- **7DTE, not 0DTE.** A controlled replay of 19 identical June SPY signals across
+  0/3/7 DTE (`logs/backtest/dte_comparison.md`) showed the −30% stop sits *inside*
+  the 0DTE noise band: it fired on 14 of 19 trades regardless of direction. At 7DTE
+  median adverse excursion is −17.4%, comfortably inside the stop, and stop-outs fell
+  to 6 of 19. The cost is convexity — 7DTE moves far less in percentage terms.
+- **No intraday hard close.** The old 13:00–13:30 flatten existed because an unclosed
+  0DTE expires or auto-exercises that day. A 7DTE contract has no such deadline, so
+  the position is instead bounded by a stop, a target, and a time stop.
 - **No entries in the first 15 minutes**: the 9:30–9:45 range is dominated by opening
   auctions and stop-hunting; signals fire on the *resolution* of that range.
 - **30% stop-loss**: a fixed fraction-of-premium stop is the only stop type that works
@@ -83,10 +89,11 @@ positions are open and while flat (signal re-checks), per `monitoring:`.
 
 | Exit | Mechanism |
 |---|---|
-| −30% stop | Resting **stop-market** sell placed immediately after entry fill: trigger at 72% of fill (−28%, slippage margin). Server-side — survives even if the session dies; the 1-min loop is the backup, not the primary. No limit floor: a stop-limit can gap through its floor and never fill, and an unfilled stop on a 0DTE is worse than a bad fill. |
-| +60% take-profit | Checked every minute. If mid ≥ 160% of fill: cancel the stop, sell at bid-pegged limit. (Not resting — Robinhood allows only one working sell against a position.) |
-| Hard close | From `hard_close_start` (13:00), deadline `hard_close_deadline` (13:30): cancel resting stops, sell everything with marketable limits (bid − 1 tick), confirm fills, retry until flat. |
-| Daily loss halt | Realized day loss ≥ `daily_loss_halt_usd` → close everything, no re-entry. |
+| −30% stop | Resting **stop-market, GTC** sell placed immediately after entry fill: trigger at 72% of fill (−28%, slippage margin). **This is the only protection an open position has** — it must be `gtc`, never `gfd`, or it expires at the close and leaves the position naked overnight. No limit floor: a stop-limit can gap through its floor and never fill. |
+| +60% take-profit | Checked every minute during market hours. If mid ≥ 160% of fill: cancel the stop, sell at bid-pegged limit, then confirm flat. (Not resting — Robinhood allows only one working sell against a position.) |
+| Time stop | Exit by 13:30 ET on the 3rd trading day after entry (`max_hold_trading_days`). |
+| DTE floor | Exit immediately if the contract reaches `min_dte_at_exit` (3 DTE), whichever comes first — this keeps the position out of the theta cliff and out of 0DTE entirely. |
+| Daily loss halt | Realized loss on a calendar day ≥ `daily_loss_halt_usd` → no further entries that day, and close any position still open. **Ordering rule (previously ambiguous):** the resting stop is a live server-side order — if it fills, that fill is the exit. The halt only force-closes positions still open at the moment it triggers. |
 
 Re-entries (up to `max_trades_per_day` total entries) are allowed after an exit if
 the time gate still holds, the symbol re-qualifies, concurrency/premium caps permit,
@@ -97,6 +104,9 @@ good-faith-violation rule).
 
 - Account: Robinhood cash account (no margin, no PDT restrictions, but T+1 settlement
   on option sale proceeds — hence the proceeds-reuse rule).
+- **Overnight gap risk is new and unavoidable.** A GTC stop-market triggers on the
+  open if a gap carries price through it, filling at whatever the market offers —
+  potentially far worse than −30%. This risk did not exist under the 0DTE design.
 - Default budget: $1,000 premium per position, ONE position at a time (single-symbol
   universe), 6 sequential entries/day. A full 30% stop is now ≈ −$300, so
   the `daily_loss_halt` of $1,000 binds first — the day ends after roughly 3 full
@@ -107,10 +117,16 @@ good-faith-violation rule).
 ## Known failure modes (accepted)
 
 - A fast gap through the stop fills at an unbounded price — with stop-market the exit
-  is guaranteed but the loss can exceed −30% (this is the accepted trade for never
-  being left holding an unprotected position). The monitor loop still market-closes
-  any position sitting below its trigger with no working stop order.
+  is guaranteed but the loss can exceed −30% (accepted trade for never holding an
+  unprotected position). Overnight gaps make this materially more likely than under
+  the intraday-only design. The monitor loop still market-closes any position sitting
+  below its trigger with no working stop order.
+- **The exit geometry is untested for multi-day holds.** The ±30/60 bands were
+  measured on *intraday* 7DTE holds, where median MFE was only +13.4% and the target
+  was reached 2 of 19 times. Over a 3-day hold the distribution widens and both
+  barriers become more reachable, but no backtest covers this combination — see the
+  warning at the top of `logs/backtest/dte_comparison.md`.
 - Signals near threshold on chop days will produce stop-outs; the daily halt bounds it.
-- If every session-scheduling mechanism fails simultaneously, the 13:31 failsafe
-  routine is the last line; worst case an ITM 0DTE auto-exercises — the hard-close +
-  failsafe redundancy exists precisely to make this improbable.
+- If every session-scheduling mechanism fails, the position still carries a working
+  GTC stop server-side, which is why that invariant is absolute. The 15:45 EOD check
+  and 16:10 failsafe exist to verify that stop is present, not to flatten positions.

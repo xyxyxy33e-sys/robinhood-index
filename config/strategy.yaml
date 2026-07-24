@@ -23,10 +23,12 @@ schedule:            # all times US/Eastern
   entry_earliest: "09:45"   # owner's choice. Backtest 07/13-07/24 across 9:35/9:45/9:50/10:00
                             # was inconclusive (spread was noise); 9:35 is the one ruled OUT
                             # structurally — one bar makes drive/range_pos pure noise.
-  entry_latest: "11:30"     # no new risk after this — trades need room before the hard close
-  hard_close_start: "13:00"
-  hard_close_deadline: "13:30"
-  failsafe_check: "13:31"
+  entry_latest: "11:30"     # no new entries after this
+  # HARD CLOSE REMOVED (owner decision). Positions are no longer flattened intraday;
+  # they are held across sessions and exited by stop / target / time-stop (see risk:).
+  eod_verify: "15:45"       # before the close: confirm every open position has a
+                            # WORKING GTC stop, and check the time-stop / DTE rules.
+  failsafe_check: "16:10"   # after the close: independent re-verification
 
 signal:
   entry_threshold: 40       # |symbol score| needed to trade that symbol (score range -100..+100)
@@ -44,9 +46,15 @@ risk:
                                    # so the halt binds well before the 6-entry cap.
   stop_loss_pct: 30                # core rule: close the position at a 30% loss
   stop_trigger_frac: 0.72          # resting stop triggers at 72% of fill (-28%, margin for slippage)
+  stop_time_in_force: gtc          # *** CRITICAL *** With no hard close, the resting stop is the
+                                   # ONLY protection on an open position. A gfd stop would expire
+                                   # at the close and leave the position naked overnight.
+  max_hold_trading_days: 3         # time stop: exit by 13:30 ET on the 3rd trading day after entry
+  min_dte_at_exit: 3               # and never hold a contract below 3 DTE (theta cliff / 0DTE risk),
+                                   # whichever comes first.
   # No limit floor: the resting stop is a stop-MARKET order. A stop-limit can gap
   # straight through its floor and never fill, leaving the position unprotected;
-  # stop-market guarantees the exit at an unbounded price. Fill > no fill on 0DTE.
+  # stop-market guarantees the exit at an unbounded price. Fill > no fill.
   take_profit_pct: 60              # monitored (not resting — one working sell order at a time)
 
 monitoring:
@@ -54,9 +62,13 @@ monitoring:
   interval_flat_minutes: 1    # signal re-checks every minute when flat, same as when open
 
 contract:
-  min_premium: 0.15         # skip contracts under $0.15/share — fills are spread-dominated (backtest finding)
-  target_delta_min: 0.35    # slightly OTM; balances cost vs responsiveness
-  target_delta_max: 0.45
+  dte_target: 7             # nearest expiration >= 7 CALENDAR days out (was 0DTE).
+                            # If +7 is a weekend/holiday, take the next available
+                            # expiration; never take one below dte_target - 1.
+  min_premium: 0.15         # skip contracts under $0.15/share — fills are spread-dominated
+  target_delta_min: 0.45    # at 7DTE this is ~1-2 strikes OTM — the contracts actually
+  target_delta_max: 0.55    # tested in logs/backtest/dte_comparison.md. Use real greeks
+                            # from get_option_quotes; do not reuse the 0DTE strike offsets.
   max_spread_pct_of_mid: 10 # skip contracts with wide bid/ask
   min_open_interest: 500
   min_volume: 100
