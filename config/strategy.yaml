@@ -10,8 +10,12 @@ mode: live
 account_number: "576391551"   # Robinhood "Agentic" cash account (agentic_allowed=true, option_level_2)
 timezone: America/New_York
 
-# ETFs with daily (0DTE) expirations. IWB has no daily expirations; IWM stands in.
-universe: [SPY, QQQ, IWM]
+# SINGLE symbol. June out-of-sample showed SPY/QQQ/IWM scores cross the threshold
+# together (same market factor), so a 3-symbol book was one leveraged bet that
+# stopped out as a unit. SPY chosen: tightest 0DTE spreads (lowest unmodeled
+# slippage) and it traded 37% less often than QQQ at the same threshold.
+# June per-symbol: SPY -$1,009 (19 trades) · QQQ -$1,379 (30) · IWM -$2,712 (33).
+universe: [SPY]
 
 schedule:            # all times US/Eastern
   sentiment_start: "09:00"
@@ -29,12 +33,12 @@ signal:
   gap_limit_pct: 1.5        # skip the day if overnight gap exceeds this (unstable regime)
   vix_max: 35               # skip the day if VIX is above this
   per_symbol_entries: true  # each universe symbol qualifies independently, in its own direction
-  allow_mixed_directions: true  # calls and puts may be held simultaneously (e.g. SPY call + IWM put)
+  # allow_mixed_directions is moot with a single-symbol universe (one position at a time).
 
 risk:
   max_premium_per_trade_usd: 1000  # max premium outlay on one position
-  max_concurrent_positions: 3      # one per universe symbol at a time
-  max_total_premium_usd: 3000      # cap on combined premium across open positions (3 x per-position)
+  max_concurrent_positions: 1      # single-symbol universe -> at most one open position
+  max_total_premium_usd: 1000      # equals the per-position cap now (only one position can be open)
   max_trades_per_day: 6
   daily_loss_halt_usd: 1000        # ~3.3 full stops at $1,000 sizing (a full stop is ~$300),
                                    # so the halt binds well before the 6-entry cap.
