@@ -49,7 +49,7 @@ Load config from `config/strategy.yaml` first — never hardcode parameters.
    including regular-session bars), re-run the score.
 2. Journal score evolution. No orders in this phase.
 
-## Phase 3 — Entry decision (9:45, re-checks until 11:30)
+## Phase 3 — Entry decision (entry_earliest 10:00, re-checks until 11:30)
 
 1. Compute final scores. The `signal.entries` list from `strategy_calc.py score`
    holds every symbol whose |score| ≥ `entry_threshold` (strongest first), each with
@@ -64,7 +64,8 @@ Load config from `config/strategy.yaml` first — never hardcode parameters.
    b. `get_option_instruments` (chain_id, expiration_dates=today, type=call|put)
       → strikes bracketing spot.
    c. `get_option_quotes` on the 4–6 candidates nearest the delta band → pick the
-      contract meeting delta/spread/OI/volume rules (delta band per config; if the
+      contract meeting delta/premium-floor/spread/OI/volume rules (skip the entry if
+      the delta-band contract's ask < min_premium; do not step strikes; per config; if the
       quote payload lacks greeks, approximate: for ~0.35–0.45 delta use the strike
       1–2 increments OTM from spot).
    d. Size: `python3 scripts/strategy_calc.py size --price <ask> --budget <config>`.
