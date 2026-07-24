@@ -4,13 +4,13 @@
 
 Capture intraday directional moves in the major index ETFs using same-day-expiration
 options, with strictly bounded downside (30% premium stop) and no exposure past
-13:00 ET — before the afternoon theta cliff and power-hour reversals.
+13:30 ET — before the afternoon theta cliff and power-hour reversals.
 
 ## Why these rules
 
 - **0DTE long options** give high convexity on a correct directional call, but decay
   fastest in the afternoon. Exiting by 13:00 keeps the trade in the window where
-  delta, not theta, dominates P&L.
+  delta, not theta, dominates P&L. (Close window per config `schedule:`.)
 - **No entries in the first 15 minutes**: the 9:30–9:45 range is dominated by opening
   auctions and stop-hunting; signals fire on the *resolution* of that range.
 - **30% stop-loss**: a fixed fraction-of-premium stop is the only stop type that works
@@ -78,7 +78,7 @@ anything is open (`monitoring.interval_open_minutes`).
 |---|---|
 | −30% stop | Resting stop-limit sell placed immediately after entry fill: trigger at 72% of fill price, limit at 65%. Server-side — survives even if the session dies; the 1-min loop is the backup, not the primary. |
 | +60% take-profit | Checked every minute. If mid ≥ 160% of fill: cancel the stop, sell at bid-pegged limit. (Not resting — Robinhood allows only one working sell against a position.) |
-| 13:00 hard close | Starting 12:45: cancel resting stops, sell everything with marketable limits (bid − 1 tick), confirm fills, retry until flat. |
+| Hard close | From `hard_close_start` (13:00), deadline `hard_close_deadline` (13:30): cancel resting stops, sell everything with marketable limits (bid − 1 tick), confirm fills, retry until flat. |
 | Daily loss halt | Realized day loss ≥ `daily_loss_halt_usd` → close everything, no re-entry. |
 
 Re-entries (up to `max_trades_per_day` total entries) are allowed after an exit if
@@ -102,6 +102,6 @@ good-faith-violation rule).
   stop-limit unfilled; the monitor loop market-closes any position whose mid is below
   the stop trigger with no working stop order.
 - Signals near threshold on chop days will produce stop-outs; the daily halt bounds it.
-- If every session-scheduling mechanism fails simultaneously, the 13:10 failsafe
+- If every session-scheduling mechanism fails simultaneously, the 13:31 failsafe
   routine is the last line; worst case an ITM 0DTE auto-exercises — the hard-close +
   failsafe redundancy exists precisely to make this improbable.

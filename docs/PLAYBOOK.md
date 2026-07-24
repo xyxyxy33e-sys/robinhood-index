@@ -83,7 +83,7 @@ Load config from `config/strategy.yaml` first — never hardcode parameters.
    never sit without a working stop for more than one monitoring cycle.**
 6. Journal: contract, qty, fill, stop order id, score at entry.
 
-## Phase 4 — Monitoring loop (entry → 12:45)
+## Phase 4 — Monitoring loop (entry → hard_close_start)
 
 Cadence: while ANY position is open, wake **every minute**
 (`send_later` with `delay_minutes: 1` — schedule the next wake first thing on each
@@ -104,23 +104,24 @@ wake so a slow turn never breaks the chain). When flat, drop to
    re-placed) or every 10th wake otherwise — a full 3-hour minute-cadence log of
    "no change" lines drowns the journal.
 
-## Phase 5 — Hard close (12:45 → 13:00)
+## Phase 5 — Hard close (hard_close_start 13:00 → deadline 13:30)
 
-1. At 12:45: `cancel_option_order` on every working order in the account for today's
+1. At `hard_close_start`: `cancel_option_order` on every working order in the account for today's
    strategy positions; then sell-to-close every open position, limit at bid − 1 tick.
 2. Poll fills every 2 min; unfilled → re-peg lower. All positions MUST be flat by
-   13:00. If a close order rejects repeatedly, keep retrying with wider limits and
-   journal each attempt (the 13:10 failsafe routine is the backstop, not the plan).
+   `hard_close_deadline` (13:30). If a close order rejects repeatedly, keep retrying
+   with wider limits and journal each attempt (the 13:31 failsafe routine is the
+   backstop, not the plan).
 3. Verify: `get_option_positions` (nonzero) returns no strategy positions.
 
-## Phase 6 — Journal & push (by ~13:05)
+## Phase 6 — Journal & push (right after hard close)
 
 1. Complete the journal: fills, P&L (realized, per trade and total), signal history,
    deviations from playbook.
 2. `git add logs/ && git commit` (message: `journal: YYYY-MM-DD <summary>`) and
    `git push -u origin claude/robinhood-day-options-strategy-y8eskp`
    (retry ×4, backoff 2/4/8/16s).
-3. End the session. Do not leave wakes scheduled past 13:10.
+3. End the session. Do not leave wakes scheduled past the failsafe check time.
 
 ## Journal template
 
