@@ -15,7 +15,7 @@ options, with strictly bounded downside (30% premium stop) and no exposure past
   auctions and stop-hunting; signals fire on the *resolution* of that range.
 - **30% stop-loss**: a fixed fraction-of-premium stop is the only stop type that works
   on 0DTE (underlying-based stops are too twitchy given gamma). It bounds a single
-  trade's loss near `0.30 × max_premium_per_trade` ≈ $150 at default sizing — "near",
+  trade's loss near `0.30 × max_premium_per_trade` ≈ $300 at default sizing — "near",
   not "at", because the stop is a market order once triggered.
 - **Sentiment before signals**: minute-level pre-market tape from 9:00 onward gives
   gap context and directional drift before the open, so the open-drive signal starts
@@ -70,7 +70,7 @@ Skip the entire day, journaling the reason, when any of:
    entry rather than stepping strikes), bid/ask spread ≤ 10% of mid, open interest
    ≥ 500, volume ≥ 100.
 5. Size per position: `floor(max_premium_per_trade / (ask × 100))` contracts, minimum
-   1 — skip the symbol if even 1 contract exceeds the per-position budget ($500), the
+   1 — skip the symbol if even 1 contract exceeds the per-position budget ($1,000), the
    combined-premium cap, or remaining settled cash.
 6. Order: limit buy at the mid, rounded up one tick; if unfilled after 2 minutes,
    re-peg to the ask once; if still unfilled after 2 more minutes, cancel and
@@ -97,10 +97,11 @@ good-faith-violation rule).
 
 - Account: Robinhood cash account (no margin, no PDT restrictions, but T+1 settlement
   on option sale proceeds — hence the proceeds-reuse rule).
-- Default budget: $500 premium per position (user rule: single position < $500), up
-  to 3 concurrent positions (one per symbol), $1,500 combined premium, 6 entries/day.
-  Worst normal day with 6 full stops ≈ −$900, which is also the `daily_loss_halt`
-  cap (~7.8% of the account's $11.6k).
+- Default budget: $1,000 premium per position, up to 3 concurrent positions (one per
+  symbol), $3,000 combined premium, 6 entries/day. A full 30% stop is now ≈ −$300, so
+  the `daily_loss_halt` of $900 binds first — the day ends after roughly 3 full stops,
+  not 6. Max premium at risk at any instant is $3,000 (~26% of the account's $11.6k);
+  max realized loss per day is the $900 halt (~7.8%).
 - Agentic API is single-leg only: long calls and long puts. No spreads, no shorts.
 
 ## Known failure modes (accepted)
