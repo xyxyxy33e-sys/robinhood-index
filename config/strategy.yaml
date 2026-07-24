@@ -1,4 +1,4 @@
-# 0DTE index options strategy — all tunable parameters.
+# SPY 7DTE index options strategy — all tunable parameters.
 # The scheduled session reads this file at 9:00 ET every trading day.
 
 # dry_run: full signal pipeline + journaling, but NO orders are placed.
