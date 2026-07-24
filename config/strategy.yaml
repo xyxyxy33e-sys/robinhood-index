@@ -42,7 +42,7 @@ risk:
 
 monitoring:
   interval_open_minutes: 1    # wake every minute while any position is open
-  interval_flat_minutes: 10   # slower cadence when flat (signal re-checks until entry_latest)
+  interval_flat_minutes: 3    # cadence when flat (signal re-checks until entry_latest)
 
 contract:
   target_delta_min: 0.35    # slightly OTM; balances cost vs responsiveness
