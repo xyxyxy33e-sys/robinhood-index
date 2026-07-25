@@ -136,16 +136,21 @@ cadence for signal re-checks (`interval_flat_minutes`). On each wake, for every 
    - Log the FIRST wake where it triggers: time, entry score, current score,
      retained %, reason, and the option's mid at that instant (i.e. what an exit
      there would have realised).
-   - **Then keep logging it every ~10 min until the position actually closes.** The
-     open question is whether exiting on decay is premature — whether the score and
-     the position recover after the trigger. Only the post-trigger path answers that,
-     so a single trigger row is not enough.
+   - **Then keep logging it EVERY MINUTE until the position actually closes** (the
+     monitoring loop already wakes every minute while a position is open, so this
+     adds no extra wakes). The open question is whether exiting on decay is
+     premature — whether the score and the position recover after the trigger. Only
+     the post-trigger path answers that, at the same 1-minute cadence the rule would
+     actually run at, so a single trigger row is not enough.
    - This must NOT change any exit decision. The −30% stop, +60% target, time stop
      and DTE floor remain the only real exits.
    - Rationale and current (thin) evidence: `logs/backtest/signal_decay_test.md`.
-7. Journal one status line per wake only when something changed (fill, exit, stop
-   re-placed) or every 10th wake otherwise — a full 3-hour minute-cadence log of
-   "no change" lines drowns the journal.
+7. Journal one *general status* line per wake only when something changed (fill,
+   exit, stop re-placed) or every 10th wake otherwise — a full 3-hour minute-cadence
+   log of "no change" lines drowns the journal. **This throttle does NOT apply to the
+   step-6 signal-decay rows: once a position is open, log one decay row every minute
+   without exception.** They are the dataset; gaps make the premature-exit question
+   unanswerable. Keep them in their own table so they do not swamp the narrative.
 
 ## Phase 5 — End-of-day verification (15:45 ET)
 
@@ -185,8 +190,8 @@ VIX: X · rv5: X% · rv10: X% · rv20: X%
 | time | contract | taken? | IV | rv10 | IV/RV | delta | theta | vega | outcome |
 ## Signal-decay tracking (diagnostic — does not gate exits)
 | time | contract | entry score | score now | retained % | triggered | option mid | hypothetical P&L if exited here |
-(first trigger, then every ~10 min until the position actually closes — the
-post-trigger path is what tells us whether decay exits are premature)
+(first trigger, then EVERY MINUTE until the position actually closes — the
+post-trigger path at live cadence is what tells us whether decay exits are premature)
 ## Trades
 | # | contract | qty | fill | stop id | exit | exit px | P&L | reason |
 ## End of day

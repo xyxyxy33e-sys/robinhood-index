@@ -40,8 +40,11 @@ full −30%.
 
 ## What is being done instead
 Journaled as a diagnostic during dry-run (`strategy_calc.py decay`, PLAYBOOK Phase 4
-step 6): log the first trigger AND the path afterwards until the real exit, so the
-premature-exit question can be answered on live per-minute data.
+step 6): log the first trigger AND the path afterwards **every minute** until the real
+exit, so the premature-exit question is answered at the same cadence the rule would
+actually run at. The monitoring loop already wakes every minute while a position is
+open, so this costs no extra wakes — and a minute-resolution post-trigger path is
+exactly what the 30-minute backtest could not provide.
 
 **Distinguish from the FAILED trend idea.** The 5sma/10sma daily filter
 (`trend_filter_test.md`) tried to predict DIRECTION and blocked $1,255 of winners.
