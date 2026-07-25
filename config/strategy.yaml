@@ -65,6 +65,12 @@ monitoring:
   interval_flat_minutes: 1    # signal re-checks every minute when flat, same as when open
 
 contract:
+  # SHADOW LEG (dry-run diagnostic, never traded): for every signal, also record the
+  # equivalent contract at this DTE so the 0DTE-vs-7DTE question gets answered on
+  # forward out-of-sample data. The June comparison (logs/backtest/dte_comparison.md)
+  # favoured 7DTE, but June was mean-reverting while July's best days came from 0DTE
+  # convexity — that ranking is likely regime-dependent and needs fresh evidence.
+  shadow_dte: 0             # set to null to stop recording the shadow leg
   dte_target: 7             # nearest expiration >= 7 CALENDAR days out (was 0DTE).
                             # If +7 is a weekend/holiday, take the next available
                             # expiration; never take one below dte_target - 1.

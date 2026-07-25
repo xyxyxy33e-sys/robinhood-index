@@ -62,6 +62,20 @@ unchanged and was not predictive in June.
    (agents independently suggested roughly −15%/+20% bands). **Deriving those from
    these same 19 trades would be curve-fitting** — it needs fresh data.
 
+## Forward test now running (added 2026-07-25)
+
+Because this ranking is likely regime-dependent, the dry-run journal now carries a
+**shadow 0DTE leg**: every live signal resolves BOTH the traded 7DTE contract and the
+equivalent 0DTE contract (same direction, same strike where available), and both are
+tracked — entry price, IV, greeks, per-minute mid, stop/target hits, and a 13:30
+terminal value for the 0DTE side (it expires; the 7DTE position carries on). The
+shadow leg is never traded.
+
+This produces on live, out-of-sample signals exactly the controlled comparison this
+document ran on June — the difference being that June was a single mean-reverting
+month I had already examined from many angles, whereas this accumulates forward.
+`contract.shadow_dte` in the config turns it off.
+
 ## Recommendation
 
 Do not adopt 3DTE; it is dominated on both axes. 7DTE is the most promising change

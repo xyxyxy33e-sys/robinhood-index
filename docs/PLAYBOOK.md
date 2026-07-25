@@ -78,6 +78,13 @@ Load config from `config/strategy.yaml` first — never hardcode parameters.
       strike-offset heuristic does not transfer to 7DTE.
    d. Size: `python3 scripts/strategy_calc.py size --price <ask> --budget <config>`.
       Confirm premium ≤ remaining settled cash.
+   d2. **Shadow leg (record, never trade).** Resolve the equivalent `shadow_dte`
+      (0DTE) contract for this same signal: same underlying, same direction, same
+      strike as the 7DTE pick where that strike exists at today's expiry — if it does
+      not, take the nearest available strike and say so. Record its ask, mid, IV and
+      greeks, and the contracts a full `max_premium_per_trade_usd` budget would have
+      bought. Skip and journal "no 0DTE expiry today" when today is not an expiration
+      date. **Never place an order for it.**
    e. **Record the volatility snapshot** from the chosen contract's `get_option_quotes`
       payload — `implied_volatility`, `delta`, `gamma`, `theta`, `vega`, plus the
       IV/RV ratio (contract IV ÷ rv10 from Phase 1, both as decimals). Do this for
@@ -130,6 +137,12 @@ cadence for signal re-checks (`interval_flat_minutes`). On each wake, for every 
 5. Realized P&L for the calendar day ≤ −`daily_loss_halt_usd` → no further entries
    today, and close any position still open. Ordering: a resting stop that already
    filled IS the exit; the halt only closes what is still open when it trips.
+5b. **Shadow-leg tracking (record, never act).** On the SAME minute-cadence wakes,
+   also quote the open position's shadow 0DTE contract and log its mid, plus whether
+   it would have hit the −30% stop or +60% target by now. Its exits are evaluated
+   against ITS OWN fill, not the 7DTE fill. A 0DTE shadow must be marked closed at
+   13:30 ET (it would expire), even though the real 7DTE position carries on — record
+   its terminal value there and stop tracking it that day.
 6. **Signal-decay diagnostic (record, never act).** While a position is open,
    recompute the held symbol's score each wake and run
    `python3 scripts/strategy_calc.py decay --entry-score <at entry> --current-score <now>`.
@@ -188,6 +201,10 @@ VIX: X · rv5: X% · rv10: X% · rv20: X%
 | time | SPY | QQQ | IWM | market | note |
 ## Volatility snapshot per signal (diagnostic — does not gate entries)
 | time | contract | taken? | IV | rv10 | IV/RV | delta | theta | vega | outcome |
+## Shadow 0DTE leg (diagnostic — never traded)
+| time | 7DTE contract | 0DTE contract | 7DTE mid | 0DTE mid | 0DTE qty @ budget | 0DTE stop/TP hit? | 0DTE terminal (13:30) |
+(same signal, same direction, same strike where available — the forward
+out-of-sample answer to whether 7DTE beat 0DTE, or whether June was just choppy)
 ## Signal-decay tracking (diagnostic — does not gate exits)
 | time | contract | entry score | score now | retained % | triggered | option mid | hypothetical P&L if exited here |
 (first trigger, then EVERY MINUTE until the position actually closes — the
