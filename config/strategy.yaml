@@ -50,6 +50,15 @@ signal:
                              # Flags when a move is speeding up or reversing, not just moving.
                              # Also an unvalidated starting guess — see `strategy_calc.py velocity
                              # --velocity-prev`.
+  option_velocity_watch_usd_per_min: 0.05    # *** DIAGNOSTIC, DOES NOT GATE ANYTHING ***
+                             # same velocity/acceleration math, applied to 0DTE call AND put
+                             # MID PRICE (dollars, not -100..100 points — hence separate
+                             # thresholds; pass via `velocity --watch-threshold`). Tracked
+                             # every flat re-check for BOTH directions regardless of which
+                             # way the sentiment score points — extends the existing
+                             # shadow-0DTE-leg snapshot into a continuous forward series.
+                             # Unvalidated starting guess.
+  option_acceleration_watch_usd_per_min2: 0.02  # as above, 2nd derivative; unvalidated guess.
 
 risk:
   max_premium_per_trade_usd: 1000  # max premium outlay on one position

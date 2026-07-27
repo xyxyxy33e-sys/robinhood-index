@@ -83,6 +83,21 @@ starting threshold, saturates once components clamp, and the two-interval
 timestamp is an approximation (uses the current step's dt, not the gap between
 the two velocity readings' midpoints) given irregular live sampling.
 
+**0DTE call/put price velocity + acceleration (diagnostic — never trades, does
+NOT gate anything).** The same `velocity` math applied to real option premiums
+instead of the abstract score, via `--watch-threshold`/`--accel-watch-threshold`
+overrides (option premiums are dollar-scale, not -100..100). Two FIXED legs —
+nearest-the-money 0DTE call and put, picked once per session at Phase 3 step 0
+— are re-quoted every flat re-check regardless of which way, if any, the
+sentiment score points; this extends the existing shadow-0DTE-leg snapshot
+(previously captured only at signal time) into a continuous forward series.
+Purpose: test whether 0DTE gamma-driven premium velocity carries information
+the sentiment-score velocity or the eventual 7DTE trade doesn't — e.g. a 0DTE
+leg could show sharp price acceleration on noise that never shows up in the
+underlying's score at all. Unvalidated thresholds, journal-only, same
+discipline as every other diagnostic here: build forward evidence before
+proposing a rule.
+
 ## Regime filters (no-trade days)
 
 Skip the entire day, journaling the reason, when any of:

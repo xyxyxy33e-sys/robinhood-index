@@ -58,6 +58,16 @@ Load config from `config/strategy.yaml` first — never hardcode parameters.
 
 ## Phase 3 — Entry decision (entry_earliest 09:45, re-checks until 11:30)
 
+0. **Resolve 0DTE reference legs, once per session (record, never trade).** If
+   `shadow_dte` (0) has a listed expiration today (already checked in Phase 0):
+   `get_option_chains` (SPY) → `get_option_instruments` (today's expiration) →
+   `get_option_quotes` to pick the nearest-the-money CALL and nearest-the-money
+   PUT to the current SPY price (independent of the sentiment score's direction —
+   track both sides regardless of which way, if any, the score is pointing).
+   Record both `option_id`s and their initial mid prices — **fix these two
+   contracts for the rest of the session** (do not re-pick a new ATM strike as
+   spot moves; that would corrupt the velocity series by switching instruments
+   mid-stream). Skip and journal "no 0DTE expiry today" if none exists.
 1. Compute final scores. The `signal.entries` list from `strategy_calc.py score`
    holds every symbol whose |score| ≥ `entry_threshold` (strongest first), each with
    its own direction — calls and puts may be opened simultaneously. Apply the news
@@ -74,6 +84,18 @@ Load config from `config/strategy.yaml` first — never hardcode parameters.
      "Score velocity tracking" table when `notable` or `notable_accel` is true,
      or the direction/accel_direction flips; this is purely diagnostic — it must
      NOT be used to decide whether to enter. See STRATEGY.md.
+   - **0DTE call/put price velocity + acceleration (record, never gate/trade).**
+     Same re-check, `get_option_quotes` on the two fixed `option_id`s from step 0
+     (cheap — no chain/instrument re-resolution needed). For EACH leg independently
+     run `python3 scripts/strategy_calc.py velocity --score-now <mid now>
+     --score-prev <mid last check> --minutes-elapsed <gap> --velocity-prev <last
+     computed pts_per_minute for that leg> --watch-threshold
+     <option_velocity_watch_usd_per_min> --accel-watch-threshold
+     <option_acceleration_watch_usd_per_min2>`. Journal a row per notable leg in
+     the "0DTE option price velocity tracking" table. Purely diagnostic — never
+     gates, never triggers a trade in either mode. If a fixed leg expires
+     worthless intraday or the quote 404s, journal it and stop tracking that leg
+     for the rest of the day (don't re-pick a new strike mid-session).
 2. For each entry candidate:
    a. `get_option_chains` (symbol) → chain id; confirm today ∈ expiration_dates.
    b. Pick the expiration: nearest listed date **>= `dte_target` (7) calendar days**
@@ -221,6 +243,13 @@ post-trigger path at live cadence is what tells us whether decay exits are prema
 | time | score now | score prev | Δminutes | points/min | direction | notable? | accel (pts/min²) | accel direction | notable accel? |
 (added 2026-07-27; row only when notable or direction flips — level-only entry_threshold
 can miss fast moves that never cross +/-40; see STRATEGY.md for the clamp caveat)
+## 0DTE option price velocity tracking (diagnostic — never trades, does not gate anything)
+| time | leg | mid now | mid prev | Δminutes | $/min | direction | notable? | accel ($/min²) | accel direction | notable accel? |
+(added 2026-07-27; two FIXED legs per session — nearest-the-money 0DTE call and put,
+picked once at Phase 3 step 0 regardless of the sentiment score's direction; row only
+when notable/notable_accel or a direction flip; extends the shadow-0DTE-leg snapshot
+into a continuous series to test whether 0DTE premium velocity/acceleration says
+anything the 7DTE-traded signal or the sentiment-score velocity doesn't)
 ## Trades
 | # | contract | qty | fill | stop id | exit | exit px | P&L | reason |
 ## End of day

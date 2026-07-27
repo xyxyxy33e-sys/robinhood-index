@@ -55,6 +55,16 @@ velocity --score-now X --score-prev Y --minutes-elapsed N [--velocity-prev V] [-
     `acceleration_watch_pts_per_min2` (config, default 0.5 — also an unvalidated
     starting guess). Same rule as velocity: DIAGNOSTIC ONLY, never gates entries.
 
+    This is a generic delta/dt tool — --score-now/--score-prev is any numeric
+    series, not just the sentiment score. Also used to track 0DTE call and put
+    MID PRICE velocity/acceleration every flat re-check (both directions, not
+    just whichever way the sentiment score currently points), extending the
+    existing shadow-0DTE-leg diagnostic from a signal-time snapshot into a
+    continuous forward series. Option premiums are dollar-scale, not -100..100,
+    so pass --watch-threshold / --accel-watch-threshold to override the config
+    defaults — see `option_velocity_watch_usd_per_min` /
+    `option_acceleration_watch_usd_per_min2` in config/strategy.yaml.
+
 rvol --closes C1,C2,C3,...
     Annualised close-to-close realised volatility (%) over trailing 5/10/20-day
     windows, from daily closes in chronological order (oldest first). Pair with a
@@ -84,6 +94,8 @@ DEFAULTS = {
     "take_profit_pct": 60.0,
     "velocity_watch_pts_per_min": 1.0,
     "acceleration_watch_pts_per_min2": 0.5,
+    "option_velocity_watch_usd_per_min": 0.05,
+    "option_acceleration_watch_usd_per_min2": 0.02,
 }
 
 WEIGHTS = {"gap": 25.0, "premarket": 25.0, "drive": 35.0, "range_pos": 15.0}
@@ -227,11 +239,19 @@ def cmd_decay(args):
 
 def cmd_velocity(args):
     cfg = load_config(args.config)
+    # Generic delta/dt tool: --score-now/--score-prev is any numeric series (sentiment
+    # score, an option's mid price, ...). --watch-threshold/--accel-watch-threshold
+    # override the config defaults (calibrated to the -100..100 sentiment score) for
+    # series on a different scale, e.g. option premiums in dollars.
     now, prev, dt = args.score_now, args.score_prev, args.minutes_elapsed
-    delta = round(now - prev, 1)
-    pts_per_min = round(delta / dt, 2) if dt else None
+    watch = args.watch_threshold if args.watch_threshold is not None else cfg["velocity_watch_pts_per_min"]
+    accel_watch = args.accel_watch_threshold if args.accel_watch_threshold is not None \
+        else cfg["acceleration_watch_pts_per_min2"]
+
+    delta = round(now - prev, 4)
+    pts_per_min = round(delta / dt, 4) if dt else None
     direction = "up" if delta > 0 else "down" if delta < 0 else "flat"
-    notable = pts_per_min is not None and abs(pts_per_min) >= cfg["velocity_watch_pts_per_min"]
+    notable = pts_per_min is not None and abs(pts_per_min) >= watch
 
     # Second derivative: acceleration = change in velocity over this same interval.
     # Approximation, not a rigorous continuous derivative — sampling is irregular/noisy
@@ -242,14 +262,14 @@ def cmd_velocity(args):
     accel_direction = None
     notable_accel = False
     if args.velocity_prev is not None and pts_per_min is not None and dt:
-        accel = round((pts_per_min - args.velocity_prev) / dt, 3)
+        accel = round((pts_per_min - args.velocity_prev) / dt, 4)
         if accel == 0:
             accel_direction = "steady"
         elif (accel > 0) == (pts_per_min > 0):
             accel_direction = "accelerating"  # speeding up in the direction it's already moving
         else:
             accel_direction = "decelerating"  # slowing down, possibly about to reverse
-        notable_accel = abs(accel) >= cfg["acceleration_watch_pts_per_min2"]
+        notable_accel = abs(accel) >= accel_watch
 
     print(json.dumps({
         "score_now": now,
@@ -322,6 +342,10 @@ def main():
     s.add_argument("--minutes-elapsed", type=float, required=True, dest="minutes_elapsed")
     s.add_argument("--velocity-prev", type=float, default=None, dest="velocity_prev",
                    help="prior points_per_minute reading, to compute acceleration (2nd derivative)")
+    s.add_argument("--watch-threshold", type=float, default=None, dest="watch_threshold",
+                   help="override velocity_watch_pts_per_min — for non-score series (e.g. option $)")
+    s.add_argument("--accel-watch-threshold", type=float, default=None, dest="accel_watch_threshold",
+                   help="override acceleration_watch_pts_per_min2 — for non-score series")
     s.add_argument("--config", default="config/strategy.yaml")
     s.set_defaults(fn=cmd_velocity)
 
