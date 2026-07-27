@@ -34,6 +34,19 @@ decay --entry-score X --current-score Y [--floor 20]
     too thin to gate exits, and 30-min backtest checkpoints cannot model the live
     1-minute cadence.
 
+velocity --score-now X --score-prev Y --minutes-elapsed N [--config ...]
+    Score RATE OF CHANGE between two consecutive readings (points/minute), distinct
+    from the entry gate which only looks at the absolute level |score| >= threshold.
+    Motivation (2026-07-27 session): the score sat in a -18..-31 band the entire
+    entry window and never crossed +/-40, yet it moved -21.8 -> -30.6 in 12 minutes
+    (9:44 -> 9:56 ET) — a real, fast directional move that the absolute-level gate
+    never saw. DIAGNOSTIC ONLY: journal it, do not gate entries on it. Also NOTE:
+    once drive/range_pos clamp (as they did by 9:59 that day), the score's
+    derivative saturates to ~0 too, for the same reason the level does — so this
+    is most informative in the pre-clamp window, not a fix for the clamped-floor
+    problem. `velocity_watch_pts_per_min` (config, default 1.0) just flags readings
+    worth a second look; it is an unvalidated starting guess, not a threshold.
+
 rvol --closes C1,C2,C3,...
     Annualised close-to-close realised volatility (%) over trailing 5/10/20-day
     windows, from daily closes in chronological order (oldest first). Pair with a
@@ -61,6 +74,7 @@ DEFAULTS = {
     "vix_max": 30.0,
     "stop_trigger_frac": 0.72,
     "take_profit_pct": 60.0,
+    "velocity_watch_pts_per_min": 1.0,
 }
 
 WEIGHTS = {"gap": 25.0, "premarket": 25.0, "drive": 35.0, "range_pos": 15.0}
@@ -202,6 +216,25 @@ def cmd_decay(args):
     }, indent=2))
 
 
+def cmd_velocity(args):
+    cfg = load_config(args.config)
+    now, prev, dt = args.score_now, args.score_prev, args.minutes_elapsed
+    delta = round(now - prev, 1)
+    pts_per_min = round(delta / dt, 2) if dt else None
+    direction = "up" if delta > 0 else "down" if delta < 0 else "flat"
+    notable = pts_per_min is not None and abs(pts_per_min) >= cfg["velocity_watch_pts_per_min"]
+    print(json.dumps({
+        "score_now": now,
+        "score_prev": prev,
+        "minutes_elapsed": dt,
+        "delta": delta,
+        "points_per_minute": pts_per_min,
+        "direction": direction,
+        "notable": notable,
+        "note": "DIAGNOSTIC ONLY - journal it, do not gate entries on it",
+    }, indent=2))
+
+
 def cmd_rvol(args):
     closes = [float(x) for x in args.closes.replace(" ", "").split(",") if x]
     if len(closes) < 6:
@@ -250,6 +283,13 @@ def main():
     s.add_argument("--current-score", type=float, required=True, dest="current_score")
     s.add_argument("--floor", type=float, default=20.0)
     s.set_defaults(fn=cmd_decay)
+
+    s = sub.add_parser("velocity")
+    s.add_argument("--score-now", type=float, required=True, dest="score_now")
+    s.add_argument("--score-prev", type=float, required=True, dest="score_prev")
+    s.add_argument("--minutes-elapsed", type=float, required=True, dest="minutes_elapsed")
+    s.add_argument("--config", default="config/strategy.yaml")
+    s.set_defaults(fn=cmd_velocity)
 
     s = sub.add_parser("rvol")
     s.add_argument("--closes", required=True,

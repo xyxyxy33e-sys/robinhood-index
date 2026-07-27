@@ -60,6 +60,19 @@ Qualitative overlay: the session also pulls headline news (`co-invest get_news`)
 decision day at 14:00, CPI print at 8:30 that whipsawed futures) — the veto and
 reason must be journaled.
 
+**Score velocity (diagnostic — does NOT gate entries).** `entry_threshold` only
+looks at the absolute level, |score| >= 40. On 2026-07-27 the score never crossed
+that level all session, but it moved -21.8 -> -30.6 in 12 minutes (9:44-9:56 ET) —
+a real, fast directional move the level-only gate never saw. Every minute during
+the flat re-check loop, `strategy_calc.py velocity` computes points/minute between
+consecutive readings and flags anything at or above `velocity_watch_pts_per_min`
+(config, default 1.0 — an unvalidated starting guess). Journaled in a dedicated
+table, never acted on, same pattern as the shadow-leg and signal-decay diagnostics:
+build forward evidence before considering a rule change. **Known limitation**: once
+drive/range_pos clamp (see the 9:59 ET structural-floor finding), the score's
+derivative saturates to ~0 for the same reason the level does — so this is
+informative mainly in the pre-clamp window, not a fix for a clamped/floored score.
+
 ## Regime filters (no-trade days)
 
 Skip the entire day, journaling the reason, when any of:

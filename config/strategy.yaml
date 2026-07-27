@@ -39,6 +39,12 @@ signal:
   vix_max: 35               # skip the day if VIX is above this
   per_symbol_entries: true  # each universe symbol qualifies independently, in its own direction
   # allow_mixed_directions is moot with a single-symbol universe (one position at a time).
+  velocity_watch_pts_per_min: 1.0  # *** DIAGNOSTIC, DOES NOT GATE ENTRIES *** score
+                             # rate-of-change (points/minute) worth flagging in the journal.
+                             # Added 2026-07-27: the level-only gate (entry_threshold) missed a
+                             # real, fast -21.8 -> -30.6 move in 12 min because it never crossed
+                             # +/-40. Unvalidated starting guess, not a tuned threshold — see
+                             # `strategy_calc.py velocity` and logs/backtest/ once evidence exists.
 
 risk:
   max_premium_per_trade_usd: 1000  # max premium outlay on one position
