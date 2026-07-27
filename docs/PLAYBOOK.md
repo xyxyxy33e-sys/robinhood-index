@@ -66,13 +66,14 @@ Load config from `config/strategy.yaml` first — never hardcode parameters.
    - Empty list → schedule re-checks every `interval_flat_minutes` until
      `entry_latest` (11:30); each re-check repeats this phase. After 11:30 →
      Phase 4 (monitor-only).
-   - **Score velocity (record, never gate).** On each flat re-check, run
-     `python3 scripts/strategy_calc.py velocity --score-now <this reading>
-     --score-prev <last reading> --minutes-elapsed <gap>` against the previous
-     re-check's score (skip on the very first re-check of the day — no prior
-     reading yet). Journal a row in the "Score velocity tracking" table only
-     when `notable: true` or the direction flips; this is purely diagnostic —
-     it must NOT be used to decide whether to enter. See STRATEGY.md.
+   - **Score velocity + acceleration (record, never gate).** On each flat re-check,
+     run `python3 scripts/strategy_calc.py velocity --score-now <this reading>
+     --score-prev <last reading> --minutes-elapsed <gap> --velocity-prev <last
+     computed points_per_minute>` (omit `--velocity-prev` on the first two
+     re-checks of the day — no prior velocity yet to diff). Journal a row in the
+     "Score velocity tracking" table when `notable` or `notable_accel` is true,
+     or the direction/accel_direction flips; this is purely diagnostic — it must
+     NOT be used to decide whether to enter. See STRATEGY.md.
 2. For each entry candidate:
    a. `get_option_chains` (symbol) → chain id; confirm today ∈ expiration_dates.
    b. Pick the expiration: nearest listed date **>= `dte_target` (7) calendar days**
@@ -217,7 +218,7 @@ out-of-sample answer to whether 7DTE beat 0DTE, or whether June was just choppy)
 (first trigger, then EVERY MINUTE until the position actually closes — the
 post-trigger path at live cadence is what tells us whether decay exits are premature)
 ## Score velocity tracking (diagnostic — does not gate entries)
-| time | score now | score prev | Δminutes | points/min | direction | notable? |
+| time | score now | score prev | Δminutes | points/min | direction | notable? | accel (pts/min²) | accel direction | notable accel? |
 (added 2026-07-27; row only when notable or direction flips — level-only entry_threshold
 can miss fast moves that never cross +/-40; see STRATEGY.md for the clamp caveat)
 ## Trades

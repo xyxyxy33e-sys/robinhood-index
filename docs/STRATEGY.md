@@ -73,6 +73,16 @@ drive/range_pos clamp (see the 9:59 ET structural-floor finding), the score's
 derivative saturates to ~0 for the same reason the level does — so this is
 informative mainly in the pre-clamp window, not a fix for a clamped/floored score.
 
+**Score acceleration (diagnostic — does NOT gate entries).** Second derivative:
+change in points/minute per minute, via `strategy_calc.py velocity --velocity-prev`.
+Flags a move speeding up or reversing, not just moving — e.g. 2026-07-27's
+9:44-9:50 bounce (+3.2 pts/min) was violently reversed by 9:50-9:56 (-4.6 pts/min),
+an acceleration of -1.3 pts/min^2, well past the placeholder
+`acceleration_watch_pts_per_min2` (0.5). Same caveats as velocity: an unvalidated
+starting threshold, saturates once components clamp, and the two-interval
+timestamp is an approximation (uses the current step's dt, not the gap between
+the two velocity readings' midpoints) given irregular live sampling.
+
 ## Regime filters (no-trade days)
 
 Skip the entire day, journaling the reason, when any of:

@@ -45,6 +45,11 @@ signal:
                              # real, fast -21.8 -> -30.6 move in 12 min because it never crossed
                              # +/-40. Unvalidated starting guess, not a tuned threshold — see
                              # `strategy_calc.py velocity` and logs/backtest/ once evidence exists.
+  acceleration_watch_pts_per_min2: 0.5  # *** DIAGNOSTIC, DOES NOT GATE ENTRIES *** 2nd
+                             # derivative — change in velocity per minute (points/min^2).
+                             # Flags when a move is speeding up or reversing, not just moving.
+                             # Also an unvalidated starting guess — see `strategy_calc.py velocity
+                             # --velocity-prev`.
 
 risk:
   max_premium_per_trade_usd: 1000  # max premium outlay on one position

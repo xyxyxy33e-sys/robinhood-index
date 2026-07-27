@@ -34,7 +34,7 @@ decay --entry-score X --current-score Y [--floor 20]
     too thin to gate exits, and 30-min backtest checkpoints cannot model the live
     1-minute cadence.
 
-velocity --score-now X --score-prev Y --minutes-elapsed N [--config ...]
+velocity --score-now X --score-prev Y --minutes-elapsed N [--velocity-prev V] [--config ...]
     Score RATE OF CHANGE between two consecutive readings (points/minute), distinct
     from the entry gate which only looks at the absolute level |score| >= threshold.
     Motivation (2026-07-27 session): the score sat in a -18..-31 band the entire
@@ -46,6 +46,14 @@ velocity --score-now X --score-prev Y --minutes-elapsed N [--config ...]
     is most informative in the pre-clamp window, not a fix for the clamped-floor
     problem. `velocity_watch_pts_per_min` (config, default 1.0) just flags readings
     worth a second look; it is an unvalidated starting guess, not a threshold.
+
+    Optional --velocity-prev (the prior points_per_minute reading) additionally
+    computes the SECOND DERIVATIVE: acceleration = (velocity_now - velocity_prev) /
+    minutes_elapsed, in points/min^2. Approximation only — reuses the current
+    step's dt rather than the gap between the two velocities' midpoints, since
+    sampling is irregular. `notable_accel` flags |acceleration| >=
+    `acceleration_watch_pts_per_min2` (config, default 0.5 — also an unvalidated
+    starting guess). Same rule as velocity: DIAGNOSTIC ONLY, never gates entries.
 
 rvol --closes C1,C2,C3,...
     Annualised close-to-close realised volatility (%) over trailing 5/10/20-day
@@ -75,6 +83,7 @@ DEFAULTS = {
     "stop_trigger_frac": 0.72,
     "take_profit_pct": 60.0,
     "velocity_watch_pts_per_min": 1.0,
+    "acceleration_watch_pts_per_min2": 0.5,
 }
 
 WEIGHTS = {"gap": 25.0, "premarket": 25.0, "drive": 35.0, "range_pos": 15.0}
@@ -223,6 +232,25 @@ def cmd_velocity(args):
     pts_per_min = round(delta / dt, 2) if dt else None
     direction = "up" if delta > 0 else "down" if delta < 0 else "flat"
     notable = pts_per_min is not None and abs(pts_per_min) >= cfg["velocity_watch_pts_per_min"]
+
+    # Second derivative: acceleration = change in velocity over this same interval.
+    # Approximation, not a rigorous continuous derivative — sampling is irregular/noisy
+    # and this reuses minutes_elapsed (the current step's dt) rather than the gap
+    # between the two velocity readings' midpoints. Requires the PRIOR velocity
+    # reading as input (same carry-forward pattern as decay's entry_score).
+    accel = None
+    accel_direction = None
+    notable_accel = False
+    if args.velocity_prev is not None and pts_per_min is not None and dt:
+        accel = round((pts_per_min - args.velocity_prev) / dt, 3)
+        if accel == 0:
+            accel_direction = "steady"
+        elif (accel > 0) == (pts_per_min > 0):
+            accel_direction = "accelerating"  # speeding up in the direction it's already moving
+        else:
+            accel_direction = "decelerating"  # slowing down, possibly about to reverse
+        notable_accel = abs(accel) >= cfg["acceleration_watch_pts_per_min2"]
+
     print(json.dumps({
         "score_now": now,
         "score_prev": prev,
@@ -231,6 +259,10 @@ def cmd_velocity(args):
         "points_per_minute": pts_per_min,
         "direction": direction,
         "notable": notable,
+        "velocity_prev": args.velocity_prev,
+        "acceleration_pts_per_min2": accel,
+        "accel_direction": accel_direction,
+        "notable_accel": notable_accel,
         "note": "DIAGNOSTIC ONLY - journal it, do not gate entries on it",
     }, indent=2))
 
@@ -288,6 +320,8 @@ def main():
     s.add_argument("--score-now", type=float, required=True, dest="score_now")
     s.add_argument("--score-prev", type=float, required=True, dest="score_prev")
     s.add_argument("--minutes-elapsed", type=float, required=True, dest="minutes_elapsed")
+    s.add_argument("--velocity-prev", type=float, default=None, dest="velocity_prev",
+                   help="prior points_per_minute reading, to compute acceleration (2nd derivative)")
     s.add_argument("--config", default="config/strategy.yaml")
     s.set_defaults(fn=cmd_velocity)
 
