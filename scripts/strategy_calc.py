@@ -94,8 +94,8 @@ DEFAULTS = {
     "take_profit_pct": 60.0,
     "velocity_watch_pts_per_min": 1.0,
     "acceleration_watch_pts_per_min2": 0.5,
-    "option_velocity_watch_usd_per_min": 0.05,
-    "option_acceleration_watch_usd_per_min2": 0.02,
+    "option_velocity_watch_usd_per_min": 0.01,
+    "option_acceleration_watch_usd_per_min2": 0.005,
 }
 
 WEIGHTS = {"gap": 25.0, "premarket": 25.0, "drive": 35.0, "range_pos": 15.0}

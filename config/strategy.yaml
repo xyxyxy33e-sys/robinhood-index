@@ -50,15 +50,22 @@ signal:
                              # Flags when a move is speeding up or reversing, not just moving.
                              # Also an unvalidated starting guess — see `strategy_calc.py velocity
                              # --velocity-prev`.
-  option_velocity_watch_usd_per_min: 0.05    # *** DIAGNOSTIC, DOES NOT GATE ANYTHING ***
+  option_velocity_watch_usd_per_min: 0.01    # *** DIAGNOSTIC, DOES NOT GATE ANYTHING ***
                              # same velocity/acceleration math, applied to 0DTE call AND put
                              # MID PRICE (dollars, not -100..100 points — hence separate
                              # thresholds; pass via `velocity --watch-threshold`). Tracked
                              # every flat re-check for BOTH directions regardless of which
                              # way the sentiment score points — extends the existing
                              # shadow-0DTE-leg snapshot into a continuous forward series.
-                             # Unvalidated starting guess.
-  option_acceleration_watch_usd_per_min2: 0.02  # as above, 2nd derivative; unvalidated guess.
+                             # Lowered from 0.05 on 2026-07-28 (owner request): the original
+                             # threshold filtered out most of that session's real but modest
+                             # cycle-to-cycle moves (e.g. -0.016, +0.0425, +0.03 $/min all
+                             # went unlogged 10:16-11:20), leaving a gap in the record even
+                             # though the underlying moved substantially in that window.
+                             # Still not zero — a leg with a truly unchanged quote between
+                             # polls stays unlogged, but real movement should now show up.
+  option_acceleration_watch_usd_per_min2: 0.005  # as above, 2nd derivative; lowered from
+                             # 0.02 on 2026-07-28 for the same reason.
 
 risk:
   max_premium_per_trade_usd: 1000  # max premium outlay on one position
