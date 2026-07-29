@@ -94,8 +94,12 @@ risk:
                                    # (logs/backtest/2026-07-13_to_2026-07-24.md), where median
                                    # MFE was only +13.4% at 7DTE and the +60% target was reached
                                    # just 2/19 times — i.e. it was already rarely the binding
-                                   # exit; most trades ran to time/DTE. Untested at 30% — no
-                                   # backtest has been re-run at this level yet.
+                                   # exit; most trades ran to time/DTE. Retested June+July 2026
+                                   # on regenerated real-data SPY 7DTE trades: supportive on June
+                                   # (+$124 vs -$1,371 counterfactual under +60%), null on July
+                                   # (nothing ever got close to either target that week) — see
+                                   # logs/backtest/take_profit_30pct_test.md. 22 trades, thin;
+                                   # not treated as settled.
   consider_exit_pct: 10            # *** DIAGNOSTIC, DOES NOT GATE EXITS *** first unrealized-
                                    # gain checkpoint worth a second look — logged every minute
                                    # once crossed, same "record, never act" pattern as signal
