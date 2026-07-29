@@ -22,7 +22,7 @@ across sessions and exited by stop, target, or time stop.
 | every minute (market hours) | Monitor: take-profit check, stop verification, time-stop / DTE-floor check |
 | 15:45 | **EOD verification**: confirm every open position still has a working GTC stop; close anything that cannot be protected |
 | 16:10 | Independent failsafe re-verifies stops on all carried positions |
-| exit | −30% stop · +60% target · 3 trading days held · or 3 DTE remaining — whichever first |
+| exit | −30% stop · +30% target · 3 trading days held · or 3 DTE remaining — whichever first |
 
 ## Repository layout
 

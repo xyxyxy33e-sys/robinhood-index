@@ -170,9 +170,14 @@ cadence for signal re-checks (`interval_flat_minutes`). On each wake, for every 
 5b. **Shadow-leg tracking (record, never act).** On the SAME minute-cadence wakes,
    also quote the open position's shadow 0DTE contract and log its mid, plus whether
    it would have hit the −30% stop or +60% target by now. Its exits are evaluated
-   against ITS OWN fill, not the 7DTE fill. A 0DTE shadow must be marked closed at
-   13:30 ET (it would expire), even though the real 7DTE position carries on — record
-   its terminal value there and stop tracking it that day.
+   against ITS OWN fill, not the 7DTE fill. **Its target stays fixed at +60% even
+   after the 2026-07-29 change to `take_profit_pct` (now 30%)** — pass
+   `stops --fill <shadow_fill> --take-profit-pct 60` explicitly, never the bare
+   config default, so the shadow leg remains the same ±30/60 geometry as the
+   original `logs/backtest/dte_comparison.md` study (otherwise the live 7DTE-vs-
+   shadow-0DTE comparison stops being apples-to-apples). A 0DTE shadow must be
+   marked closed at 13:30 ET (it would expire), even though the real 7DTE position
+   carries on — record its terminal value there and stop tracking it that day.
 6. **Signal-decay diagnostic (record, never act).** While a position is open,
    recompute the held symbol's score each wake and run
    `python3 scripts/strategy_calc.py decay --entry-score <at entry> --current-score <now>`.
@@ -185,9 +190,16 @@ cadence for signal re-checks (`interval_flat_minutes`). On each wake, for every 
      premature — whether the score and the position recover after the trigger. Only
      the post-trigger path answers that, at the same 1-minute cadence the rule would
      actually run at, so a single trigger row is not enough.
-   - This must NOT change any exit decision. The −30% stop, +60% target, time stop
+   - This must NOT change any exit decision. The −30% stop, +30% target, time stop
      and DTE floor remain the only real exits.
    - Rationale and current (thin) evidence: `logs/backtest/signal_decay_test.md`.
+6b. **Consider-exit diagnostic (record, never act).** Same "record, never act"
+   status as step 6 — added 2026-07-29 alongside the take-profit change from +60%
+   to +30%. `stops --fill <avg_fill>` (already called in Phase 3 step 5) returns
+   `consider_exit` (config `consider_exit_pct`, default +10%). Log the FIRST wake
+   where mid ≥ that level, then every minute after (same reasoning as step 6: only
+   the post-trigger path shows whether the position keeps running toward the real
+   +30% target or fades). Zero backtest evidence — do not act on it.
 7. Journal one *general status* line per wake only when something changed (fill,
    exit, stop re-placed) or every 10th wake otherwise — a full 3-hour minute-cadence
    log of "no change" lines drowns the journal. **This throttle does NOT apply to the

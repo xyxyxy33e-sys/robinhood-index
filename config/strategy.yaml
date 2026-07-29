@@ -85,7 +85,27 @@ risk:
   # No limit floor: the resting stop is a stop-MARKET order. A stop-limit can gap
   # straight through its floor and never fill, leaving the position unprotected;
   # stop-market guarantees the exit at an unbounded price. Fill > no fill.
-  take_profit_pct: 60              # monitored (not resting — one working sell order at a time)
+  take_profit_pct: 30              # *** HARD EXIT, same mechanism as the old +60% ***
+                                   # monitored (not resting — one working sell order at a time).
+                                   # Lowered from 60 on 2026-07-29 (owner request) after that
+                                   # day's SPY 740P: +40.6% unrealized at 12:15 ET round-tripped
+                                   # all the way to a -28.96% stop-out by 14:45 ET on an FOMC-
+                                   # driven reversal. +60% was set from the July 0DTE backtest
+                                   # (logs/backtest/2026-07-13_to_2026-07-24.md), where median
+                                   # MFE was only +13.4% at 7DTE and the +60% target was reached
+                                   # just 2/19 times — i.e. it was already rarely the binding
+                                   # exit; most trades ran to time/DTE. Untested at 30% — no
+                                   # backtest has been re-run at this level yet.
+  consider_exit_pct: 10            # *** DIAGNOSTIC, DOES NOT GATE EXITS *** first unrealized-
+                                   # gain checkpoint worth a second look — logged every minute
+                                   # once crossed, same "record, never act" pattern as signal
+                                   # decay (`strategy_calc.py decay`). Added 2026-07-29 for the
+                                   # same reason as the take_profit_pct change above: a cheap,
+                                   # early flag on positions that are up but still far from the
+                                   # hard take-profit, in case a future rule wants to act earlier
+                                   # than 30%. Unvalidated starting guess, not a tuned threshold —
+                                   # zero backtest evidence yet, same caveat as
+                                   # velocity_watch_pts_per_min above.
 
 monitoring:
   interval_open_minutes: 1    # wake every minute while any position is open

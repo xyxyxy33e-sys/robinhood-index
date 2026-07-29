@@ -24,7 +24,11 @@ size --price ASK --budget USD
 
 stops --fill AVG_FILL [--config ...]
     Stop trigger and take-profit prices for a filled long option. The stop is a
-    stop-MARKET order, so there is no limit floor to compute.
+    stop-MARKET order, so there is no limit floor to compute. Also returns
+    consider_exit (config `consider_exit_pct`, default 10%) — a DIAGNOSTIC-ONLY
+    early checkpoint, same "record, never act" status as `decay`/`velocity`: log
+    it when the mid crosses this level, do not exit on it. Only stop_trigger and
+    take_profit are real, gating exits.
 
 decay --entry-score X --current-score Y [--floor 20]
     Signal-decay check for an OPEN position: has the thesis that justified the entry
@@ -91,7 +95,8 @@ DEFAULTS = {
     "gap_limit_pct": 1.5,
     "vix_max": 30.0,
     "stop_trigger_frac": 0.72,
-    "take_profit_pct": 60.0,
+    "take_profit_pct": 30.0,
+    "consider_exit_pct": 10.0,
     "velocity_watch_pts_per_min": 1.0,
     "acceleration_watch_pts_per_min2": 0.5,
     "option_velocity_watch_usd_per_min": 0.01,
@@ -308,11 +313,15 @@ def cmd_rvol(args):
 
 def cmd_stops(args):
     cfg = load_config(args.config)
+    take_profit_pct = args.take_profit_pct if args.take_profit_pct is not None else cfg["take_profit_pct"]
     print(json.dumps({
         "stop_trigger": round(args.fill * cfg["stop_trigger_frac"], 2),
         "order_type": "stop_market",
-        "take_profit": round(args.fill * (1 + cfg["take_profit_pct"] / 100.0), 2),
+        "take_profit": round(args.fill * (1 + take_profit_pct / 100.0), 2),
+        "take_profit_pct_used": take_profit_pct,
         "max_loss_at_trigger_pct": round((1 - cfg["stop_trigger_frac"]) * 100, 1),
+        "consider_exit": round(args.fill * (1 + cfg["consider_exit_pct"] / 100.0), 2),
+        "consider_exit_note": "DIAGNOSTIC ONLY - journal it, do not act on it",
     }, indent=2))
 
 
@@ -357,6 +366,12 @@ def main():
     s = sub.add_parser("stops")
     s.add_argument("--fill", type=float, required=True, help="avg fill, per share")
     s.add_argument("--config", default="config/strategy.yaml")
+    s.add_argument("--take-profit-pct", type=float, default=None,
+                    help="override config take_profit_pct — use for the shadow 0DTE leg, "
+                         "which must stay fixed at the original DTE-comparison geometry "
+                         "(60%%) regardless of the live 7DTE position's take_profit_pct, "
+                         "so it remains an apples-to-apples comparison. See "
+                         "logs/backtest/dte_comparison.md.")
     s.set_defaults(fn=cmd_stops)
 
     args = p.parse_args()
