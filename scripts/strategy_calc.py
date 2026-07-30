@@ -22,13 +22,22 @@ score --input bars.json [--config config/strategy.yaml]
 size --price ASK --budget USD
     Contracts affordable at ASK (per-share premium) within the budget. 0 = skip.
 
-stops --fill AVG_FILL [--config ...]
+stops --fill AVG_FILL [--peak PEAK_PRICE] [--config ...]
     Stop trigger and take-profit prices for a filled long option. The stop is a
     stop-MARKET order, so there is no limit floor to compute. Also returns
-    consider_exit (config `consider_exit_pct`, default 10%) — a DIAGNOSTIC-ONLY
-    early checkpoint, same "record, never act" status as `decay`/`velocity`: log
-    it when the mid crosses this level, do not exit on it. Only stop_trigger and
-    take_profit are real, gating exits.
+    consider_exit (config `consider_exit_pct`, default 10%).
+
+    consider_exit is a REAL, GATING trailing-stop ACTIVATION level as of
+    2026-07-30 (previously diagnostic-only 2026-07-29 -> 2026-07-30). Pass
+    --peak (the highest price the position has reached since entry) to compute
+    the trailing stop: once peak's unrealized gain first reaches consider_exit_pct,
+    the effective stop tightens off the original stop_trigger to sit
+    `trail_stop_distance_pct` (config, default 14) percentage points behind the
+    peak's gain, and only ever moves up as new peaks are made. Without --peak,
+    only the static stop_trigger/take_profit/consider_exit levels are returned
+    (e.g. for a not-yet-filled sizing check). Only stop_trigger, take_profit,
+    and (once active) the trailing stop are real, gating exits — signal decay
+    remains diagnostic-only.
 
 decay --entry-score X --current-score Y [--floor 20]
     Signal-decay check for an OPEN position: has the thesis that justified the entry
@@ -97,6 +106,7 @@ DEFAULTS = {
     "stop_trigger_frac": 0.72,
     "take_profit_pct": 30.0,
     "consider_exit_pct": 10.0,
+    "trail_stop_distance_pct": 14.0,
     "velocity_watch_pts_per_min": 1.0,
     "acceleration_watch_pts_per_min2": 0.5,
     "option_velocity_watch_usd_per_min": 0.01,
@@ -314,15 +324,33 @@ def cmd_rvol(args):
 def cmd_stops(args):
     cfg = load_config(args.config)
     take_profit_pct = args.take_profit_pct if args.take_profit_pct is not None else cfg["take_profit_pct"]
-    print(json.dumps({
-        "stop_trigger": round(args.fill * cfg["stop_trigger_frac"], 2),
+    stop_trigger = round(args.fill * cfg["stop_trigger_frac"], 2)
+    out = {
+        "stop_trigger": stop_trigger,
         "order_type": "stop_market",
         "take_profit": round(args.fill * (1 + take_profit_pct / 100.0), 2),
         "take_profit_pct_used": take_profit_pct,
         "max_loss_at_trigger_pct": round((1 - cfg["stop_trigger_frac"]) * 100, 1),
         "consider_exit": round(args.fill * (1 + cfg["consider_exit_pct"] / 100.0), 2),
-        "consider_exit_note": "DIAGNOSTIC ONLY - journal it, do not act on it",
-    }, indent=2))
+        "consider_exit_note": "REAL - trailing-stop activation level as of 2026-07-30 (pass --peak to compute the trailing stop)",
+    }
+    if args.peak is not None:
+        peak_gain_pct = pct(args.peak, args.fill)
+        out["peak"] = args.peak
+        out["peak_gain_pct"] = round(peak_gain_pct, 2)
+        active = peak_gain_pct >= cfg["consider_exit_pct"]
+        out["trailing_stop_active"] = active
+        if active:
+            trail_gain_pct = peak_gain_pct - cfg["trail_stop_distance_pct"]
+            trailing_stop = round(args.fill * (1 + trail_gain_pct / 100.0), 2)
+            out["trailing_stop"] = trailing_stop
+            out["trail_stop_distance_pct_used"] = cfg["trail_stop_distance_pct"]
+            out["effective_stop"] = round(max(trailing_stop, stop_trigger), 2)
+        else:
+            out["effective_stop"] = stop_trigger
+    else:
+        out["effective_stop"] = stop_trigger
+    print(json.dumps(out, indent=2))
 
 
 def main():
@@ -372,6 +400,11 @@ def main():
                          "(60%%) regardless of the live 7DTE position's take_profit_pct, "
                          "so it remains an apples-to-apples comparison. See "
                          "logs/backtest/dte_comparison.md.")
+    s.add_argument("--peak", type=float, default=None,
+                    help="highest price reached since entry — computes the trailing stop "
+                         "(effective_stop/trailing_stop/trailing_stop_active) once "
+                         "consider_exit_pct has been crossed. Omit for a static/pre-fill "
+                         "check with no trailing-stop computation.")
     s.set_defaults(fn=cmd_stops)
 
     args = p.parse_args()

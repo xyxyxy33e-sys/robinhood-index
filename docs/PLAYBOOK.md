@@ -154,16 +154,29 @@ wake so a slow turn never breaks the chain). When flat, keep the same 1-minute
 cadence for signal re-checks (`interval_flat_minutes`). On each wake, for every open position:
 1. `get_option_positions` (nonzero) + `get_option_quotes` on held contracts;
    `get_option_orders` to confirm each position's stop is still working.
-2. Stop filled → journal exit P&L. If time < `entry_latest`, entries used <
-   `max_trades_per_day`, and caps permit: re-run Phase 3 re-check (funded from
-   settled cash only).
+   Track the position's peak price (highest mid/mark seen since entry, initialized
+   to the fill on the first wake) — needed for step 1b.
+1b. **Trailing-stop check (real, gating — see step 6b for the activation trigger).**
+   `python3 scripts/strategy_calc.py stops --fill <avg_fill> --peak <peak so far>`.
+   If `trailing_stop_active` is true and `effective_stop` is HIGHER than the
+   currently-resting stop's price: re-place the resting stop-market GTC order at
+   the new `effective_stop` (cancel the old one first in live mode; in dry_run
+   journal the hypothetical re-place). The stop only ever moves up — never lower
+   it even if price pulls back and a later peak is not re-tested.
+2. Stop filled (at either the static −28% level or a tightened trailing level) →
+   journal exit P&L and which stop level it was. If time < `entry_latest`, entries
+   used < `max_trades_per_day`, and caps permit: re-run Phase 3 re-check (funded
+   from settled cash only) — this includes fills off the trailing stop, not just
+   the original −28% level.
 2b. **Time stop / DTE floor:** if the position has been held `max_hold_trading_days`
    (3) trading days, or the contract has reached `min_dte_at_exit` (3 DTE), close it
    now — cancel the stop, sell at a bid-pegged limit, re-peg every 2 min until flat.
 3. Mid ≥ take-profit level → cancel that position's stop (`cancel_option_order`),
    sell at bid-pegged limit, confirm fill, journal.
 4. Safety net: position open but **no working stop** (cancelled/rejected/expired) and
-   mid ≤ stop trigger → sell immediately at marketable limit; else re-place the stop.
+   mid ≤ current `effective_stop` (the trailing level if active, else the static
+   −28% stop_trigger) → sell immediately at marketable limit; else re-place the
+   stop at `effective_stop`.
 5. Realized P&L for the calendar day ≤ −`daily_loss_halt_usd` → no further entries
    today, and close any position still open. Ordering: a resting stop that already
    filled IS the exit; the halt only closes what is still open when it trips.
@@ -190,16 +203,18 @@ cadence for signal re-checks (`interval_flat_minutes`). On each wake, for every 
      premature — whether the score and the position recover after the trigger. Only
      the post-trigger path answers that, at the same 1-minute cadence the rule would
      actually run at, so a single trigger row is not enough.
-   - This must NOT change any exit decision. The −30% stop, +30% target, time stop
-     and DTE floor remain the only real exits.
+   - This must NOT change any exit decision. The trailing stop, +30% target, time
+     stop, and DTE floor remain the only real exits.
    - Rationale and current (thin) evidence: `logs/backtest/signal_decay_test.md`.
-6b. **Consider-exit diagnostic (record, never act).** Same "record, never act"
-   status as step 6 — added 2026-07-29 alongside the take-profit change from +60%
-   to +30%. `stops --fill <avg_fill>` (already called in Phase 3 step 5) returns
-   `consider_exit` (config `consider_exit_pct`, default +10%). Log the FIRST wake
-   where mid ≥ that level, then every minute after (same reasoning as step 6: only
-   the post-trigger path shows whether the position keeps running toward the real
-   +30% target or fades). Zero backtest evidence — do not act on it.
+6b. **Consider-exit / trailing-stop activation (REAL, gating — as of 2026-07-30).**
+   Was "record, never act" 2026-07-29 → 2026-07-30; promoted to a real rule. On
+   the same wake as step 1b, `stops --fill <avg_fill> --peak <peak so far>`
+   returns `consider_exit` (config `consider_exit_pct`, default +10%) and, once
+   the peak's gain first crosses it, `trailing_stop`/`effective_stop`. Log the
+   FIRST wake where it activates, then keep logging the effective stop level
+   every minute after alongside step 1b's re-place check (same reasoning as step
+   6: the post-trigger path is the data). Zero backtest evidence for the +10%
+   activation level or the 14pp trail width — both unvalidated starting guesses.
 7. Journal one *general status* line per wake only when something changed (fill,
    exit, stop re-placed) or every 10th wake otherwise — a full 3-hour minute-cadence
    log of "no change" lines drowns the journal. **This throttle does NOT apply to the
@@ -216,6 +231,11 @@ Positions are NOT flattened. This phase makes them safe to carry overnight.
    b. Missing / cancelled / rejected / `gfd` → re-place it as GTC immediately. If it
       cannot be placed as GTC, CLOSE the position before 16:00 rather than carry it
       unprotected.
+   c. Confirm the resting stop's price matches the current `effective_stop`
+      (`strategy_calc.py stops --fill <avg_fill> --peak <peak so far>`) — if the
+      position's peak has moved since the last Phase-4 re-place and the stop is
+      stale (lower than `effective_stop`), re-place it now rather than carrying a
+      looser-than-intended stop overnight.
 2. Check the time stop and DTE floor: anything that will breach
    `min_dte_at_exit` or `max_hold_trading_days` before the next session must be
    closed now, not next morning.

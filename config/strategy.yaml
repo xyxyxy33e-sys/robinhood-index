@@ -100,16 +100,32 @@ risk:
                                    # (nothing ever got close to either target that week) — see
                                    # logs/backtest/take_profit_30pct_test.md. 22 trades, thin;
                                    # not treated as settled.
-  consider_exit_pct: 10            # *** DIAGNOSTIC, DOES NOT GATE EXITS *** first unrealized-
-                                   # gain checkpoint worth a second look — logged every minute
-                                   # once crossed, same "record, never act" pattern as signal
-                                   # decay (`strategy_calc.py decay`). Added 2026-07-29 for the
-                                   # same reason as the take_profit_pct change above: a cheap,
-                                   # early flag on positions that are up but still far from the
-                                   # hard take-profit, in case a future rule wants to act earlier
-                                   # than 30%. Unvalidated starting guess, not a tuned threshold —
-                                   # zero backtest evidence yet, same caveat as
-                                   # velocity_watch_pts_per_min above.
+  consider_exit_pct: 10            # *** REAL, GATING RULE as of 2026-07-30 (owner decision) ***
+                                   # first unrealized-gain checkpoint. Was diagnostic-only
+                                   # 2026-07-29 -> 2026-07-30 (logged, never acted on); promoted
+                                   # to a real trailing-stop ACTIVATION trigger after the
+                                   # 2026-07-30 SPY 738C crossed +10% at 13:01 ET and did not
+                                   # exit until +32% five hours later — a live case for capturing
+                                   # some of that gap rather than only journaling it. Once
+                                   # unrealized gain first crosses this level, the resting stop
+                                   # tightens off the -28% floor to trail the peak — see
+                                   # `trail_stop_distance_pct` below and `strategy_calc.py stops
+                                   # --fill F --peak P`. Still an unvalidated starting guess, not
+                                   # a tuned threshold — zero backtest evidence for +10% as an
+                                   # activation level, same caveat as velocity_watch_pts_per_min
+                                   # above; only now it gates something real, so re-tune if it
+                                   # proves too trigger-happy.
+  trail_stop_distance_pct: 14      # *** REAL, GATING RULE, added 2026-07-30 (owner decision) ***
+                                   # once the trailing stop is active (see consider_exit_pct),
+                                   # the effective stop sits this many percentage points (of
+                                   # fill-relative gain) behind the highest unrealized gain
+                                   # reached since activation, and only ever moves up. Chosen as
+                                   # half of the original -28% stop width (stop_trigger_frac) —
+                                   # tighter than the initial stop since it is now protecting
+                                   # profit rather than absorbing entry volatility, but with
+                                   # enough room to avoid getting shaken out by ordinary chop.
+                                   # Unvalidated starting guess, zero backtest evidence, same
+                                   # caveat as consider_exit_pct above.
 
 monitoring:
   interval_open_minutes: 1    # wake every minute while any position is open
