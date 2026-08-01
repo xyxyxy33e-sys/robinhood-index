@@ -129,6 +129,24 @@ Skip the entire day, journaling the reason, when any of:
    re-peg to the ask once; if still unfilled after 2 more minutes, cancel and
    re-evaluate the signal from scratch.
 
+**Entry-extremity diagnostic (record, never gate — added 2026-07-31).** For every
+position actually entered, log the `drive` component/`drive_pct`, whether `drive`
+is clamped (`abs(drive_pct) >= 0.30`, i.e. pinned at its ±35 max), and `range_pos`
+(raw 0–1, plus near-low/near-high/mid-range). Motivation: the first week of live
+trading (2026-07-27→31, 3 entries) showed a `range_pos` pattern worth watching —
+both losing PUT entries fired with `range_pos` essentially AT the day's exact low
+(0.009 and 0.032), while the one winning CALL entry fired closer to, but short of,
+the exact high (0.943) — but checking `drive`-clamp state on the same three trades
+does NOT support a clean story: the winning entry's `drive` was actually *more*
+clamped in percentage terms (92.9% of max) than one of the losing entries (90.9%),
+so "drive clamped" alone does not distinguish these three outcomes. This is
+recorded as a hypothesis, not a finding: n=3, directions are confounded (2 puts,
+1 call), and the one part of the original hunch that looked cleanest (drive-clamp)
+already failed to hold up under the actual numbers — a caution against reading too
+much into any of it yet. It does not gate entries. Revisit only once there's
+enough entries to test it without curve-fitting to three trades — see
+`logs/journal/` "Entry extremity tracking" table.
+
 ## Exit rules (first hit wins)
 
 Exits are evaluated per position, on a **1-minute monitoring cadence** — both while

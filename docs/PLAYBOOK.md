@@ -124,6 +124,20 @@ Load config from `config/strategy.yaml` first — never hardcode parameters.
       headwind. Historical IV is not retrievable through these tools, so this forward
       record is the only way to test whether the ratio predicts outcomes. It is
       DIAGNOSTIC ONLY — it does not gate entries and must not change any decision.
+   f. **Record the entry-extremity diagnostic** (added 2026-07-31) — ONLY for a
+      signal that is actually taken (not every qualifying signal like step e). From
+      the entering `strategy_calc.py score` output's `detail`/`components`, record:
+      `drive` component value and `drive_pct`, whether drive is clamped
+      (`abs(drive_pct) >= 0.30`, i.e. the component sits at its ±35 max), and
+      `range_pos` (raw 0–1) with a qualitative read (near-low <0.15, near-high >0.85,
+      else mid-range). **Rationale:** the first week of live entries (2 losses, 1 win)
+      showed a suggestive `range_pos` pattern (both losses at the exact day-low,
+      0.009/0.032; the win short of the exact high, 0.943) but the `drive`-clamp part
+      of the original hunch did NOT hold up — the winning entry was actually more
+      clamped in percentage terms than one of the losses. n=3, not remotely enough to
+      act on; see STRATEGY.md for the full caveat. DIAGNOSTIC ONLY — it does not gate
+      entries and must not change any decision until there is enough data to test it
+      properly.
 3. Place (live mode): `review_option_order` (limit buy, mid rounded up one tick,
    gfd, with `chain_symbol` + `underlying_type` for fees) → inspect alerts; any
    blocking alert → journal and abort the trade. Then `place_option_order` with a
@@ -144,7 +158,8 @@ Load config from `config/strategy.yaml` first — never hardcode parameters.
    position instead and journal the rejection.
    **A position must never sit without a working stop for more than one monitoring
    cycle.**
-6. Journal: contract, qty, fill, stop order id, score at entry.
+6. Journal: contract, qty, fill, stop order id, score at entry, and the entry-extremity
+   diagnostic row (step 2f) in the "Entry extremity tracking" table.
 
 ## Phase 4 — Monitoring loop (during market hours)
 
@@ -282,6 +297,13 @@ picked once at Phase 3 step 0 regardless of the sentiment score's direction; row
 when notable/notable_accel or a direction flip; extends the shadow-0DTE-leg snapshot
 into a continuous series to test whether 0DTE premium velocity/acceleration says
 anything the 7DTE-traded signal or the sentiment-score velocity doesn't)
+## Entry extremity tracking (diagnostic — does not gate entries)
+| time | contract | direction | entry score | drive component | drive_pct | drive clamped? | range_pos (raw 0-1) | extremity |
+(added 2026-07-31; one row per position actually entered, not every qualifying
+signal — see PLAYBOOK.md Phase 3 step 2f and STRATEGY.md for rationale. Tests
+whether entering into an already-clamped/exhausted drive reading correlates with
+worse outcomes than entering into a strong-but-not-yet-clamped one. n=3 as of
+2026-07-31, not enough to act on)
 ## Trades
 | # | contract | qty | fill | stop id | exit | exit px | P&L | reason |
 ## End of day
