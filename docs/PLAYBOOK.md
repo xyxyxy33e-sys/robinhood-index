@@ -33,17 +33,26 @@ Load config from `config/strategy.yaml` first — never hardcode parameters.
 
 1. At 9:00: `co-invest get_news` — scan for regime-filter events (FOMC, CPI, NFP,
    major geopolitical shock). `get_indexes` / `get_index_quotes` for VIX level.
-1b. **VIX day-over-day change (diagnostic, added 2026-08-04).** Fetch VIX's prior daily
-   close via `get_index_historicals` (interval=day, ~5 calendar days back, take the last
-   completed bar) and run `python3 scripts/strategy_calc.py velocity --score-now <today's
-   VIX from step 1> --score-prev <prior close> --minutes-elapsed 1 --watch-threshold 5.0`.
-   `--minutes-elapsed 1` here means "1 day-step", NOT one minute — do not pass 1440; the
-   tool's `notable` flag compares against `watch-threshold` on that same unit, so a real
-   1440-minute dt would silently dilute a 5+ point day-over-day jump to ~0.003 pts/min and
-   `notable` would almost never fire. With dt=1, `delta` and `points_per_minute` both read
-   directly as the day-over-day point change. Journal the result next to the VIX level.
-   *** DIAGNOSTIC ONLY — does not gate entries, see `vix_change_watch_pts_per_day` in
-   config/strategy.yaml for rationale ***.
+1b. **VIX day-over-day change + acceleration (diagnostic, added 2026-08-04).** Fetch VIX's
+   last TWO completed daily closes via `get_index_historicals` (interval=day, ~7 calendar
+   days back to be safe over weekends/holidays, take the last two completed bars: T-2 and
+   T-1). Compute:
+   - **Yesterday's velocity** (needed only as an input to today's acceleration):
+     `python3 scripts/strategy_calc.py velocity --score-now <T-1 close> --score-prev <T-2
+     close> --minutes-elapsed 1` → read its `delta` (or `points_per_minute`, identical at
+     dt=1) as yesterday's day-over-day change.
+   - **Today's change + acceleration**: `python3 scripts/strategy_calc.py velocity
+     --score-now <today's VIX from step 1> --score-prev <T-1 close> --minutes-elapsed 1
+     --velocity-prev <yesterday's delta from above> --watch-threshold 5.0
+     --accel-watch-threshold 3.0`.
+   `--minutes-elapsed 1` in both calls means "1 day-step", NOT one minute — do not pass
+   1440; the tool's `notable`/`notable_accel` flags compare against the watch thresholds on
+   that same unit, so a real 1440-minute dt would silently dilute a 5+ point jump to ~0.003
+   pts/min and neither flag would ever fire. With dt=1, `delta`/`points_per_minute` read
+   directly as the day-over-day point change, and `acceleration_pts_per_min2` reads directly
+   as points/day². Journal both the change and the acceleration next to the VIX level.
+   *** DIAGNOSTIC ONLY — does not gate entries, see `vix_change_watch_pts_per_day` and
+   `vix_acceleration_watch_pts_per_day2` in config/strategy.yaml for rationale ***.
 2. Poll minute bars with `get_equity_historicals`:
    `symbols=[SPY,QQQ,IWM]`, `interval=minute`, `bounds=extended`,
    `start_time=<09:00 ET today in UTC>`. Each poll returns the full minute-by-minute
@@ -298,7 +307,7 @@ Positions are NOT flattened. This phase makes them safe to carry overnight.
 
 ```markdown
 # SPY 7DTE Journal — YYYY-MM-DD
-mode: <dry_run|live>  |  settled cash at open: $X  |  VIX: X (prior close X, Δ X pts/day, diagnostic only)
+mode: <dry_run|live>  |  settled cash at open: $X  |  VIX: X (prior close X, Δ X pts/day, accel X pts/day², diagnostic only)
 ## Regime
 gap SPY: X% · news veto: none|<reason> · tradeable: yes|no
 ## Volatility baseline

@@ -106,13 +106,17 @@ Skip the entire day, journaling the reason, when any of:
 - A major scheduled macro event lands inside the trade window (FOMC statement,
   CPI/PCE/NFP released after 9:00 ET)
 
-**VIX day-over-day change (diagnostic only, added 2026-08-04)** — `vix_change_watch_pts_per_day`
-in config, computed via `strategy_calc.py velocity` at Phase 1. `vix_max` is a level gate; it
-was never actually validated against real historical VIX (the June out-of-sample backtest had
-no VIX data to test it on — see `logs/backtest/2026-06_out_of_sample.md`). A fast VIX *jump*
-can signal the same mean-reversion/whipsaw regime shift that made June lose money, even before
-the level crosses `vix_max`. Logged, not gating — same discipline as the velocity/acceleration
-diagnostics above: build forward evidence before proposing a rule.
+**VIX day-over-day change + acceleration (diagnostic only, added 2026-08-04)** —
+`vix_change_watch_pts_per_day` and `vix_acceleration_watch_pts_per_day2` in config, both
+computed via `strategy_calc.py velocity` at Phase 1 (velocity, then acceleration via
+`--velocity-prev`, same 2nd-derivative mechanism as the sentiment-score diagnostics above).
+`vix_max` is a level gate; it was never actually validated against real historical VIX (the
+June out-of-sample backtest had no VIX data to test it on — see
+`logs/backtest/2026-06_out_of_sample.md`). A fast VIX *jump*, and especially a jump that is
+itself accelerating day over day, can signal the same mean-reversion/whipsaw regime shift
+that made June lose money, even before the level crosses `vix_max`. Logged, not gating —
+same discipline as the velocity/acceleration diagnostics above: build forward evidence
+before proposing a rule.
 
 ## Entry rules
 

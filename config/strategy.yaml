@@ -87,6 +87,20 @@ signal:
                              # passing the literal 1440 minutes/day dilutes the per-minute rate
                              # so `notable` never fires at a sane threshold. See docs/PLAYBOOK.md
                              # Phase 1 step 1b for the worked-through reasoning.
+  vix_acceleration_watch_pts_per_day2: 3.0  # *** DIAGNOSTIC, DOES NOT GATE ENTRIES *** 2nd
+                             # derivative of VIX — is the day-over-day change ITSELF getting
+                             # bigger (accelerating) or smaller (decelerating), same 2nd-
+                             # derivative math as acceleration_watch_pts_per_min2 above, applied
+                             # to vix_change_watch_pts_per_day. Added 2026-08-04 (owner request,
+                             # same conversation as vix_change_watch_pts_per_day) — a VIX jump
+                             # that is itself accelerating (e.g. +2.6 pts one day, +6.4 the next)
+                             # is a stronger regime-shift signal than either single day-over-day
+                             # reading alone. Reuses `strategy_calc.py velocity --velocity-prev
+                             # <yesterday's day-over-day delta>` — no new script code. Requires
+                             # ONE extra day of VIX history (T-2) at Phase 1 to compute yesterday's
+                             # velocity as the --velocity-prev input; see docs/PLAYBOOK.md step 1b.
+                             # Unvalidated starting guess, zero backtest evidence, same caveat as
+                             # every other *_watch_* parameter in this file.
                              # Unvalidated starting guess, zero backtest evidence for 5.0 pts/day
                              # specifically, same caveat as every other *_watch_* parameter above.
                              # DIAGNOSTIC ONLY per house convention: log it, do not act on it,
