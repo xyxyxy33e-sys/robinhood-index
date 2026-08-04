@@ -41,18 +41,22 @@ Load config from `config/strategy.yaml` first — never hardcode parameters.
      `python3 scripts/strategy_calc.py velocity --score-now <T-1 close> --score-prev <T-2
      close> --minutes-elapsed 1` → read its `delta` (or `points_per_minute`, identical at
      dt=1) as yesterday's day-over-day change.
-   - **Today's change + acceleration**: `python3 scripts/strategy_calc.py velocity
-     --score-now <today's VIX from step 1> --score-prev <T-1 close> --minutes-elapsed 1
-     --velocity-prev <yesterday's delta from above> --watch-threshold 5.0
-     --accel-watch-threshold 3.0`.
+   - **Today's change + acceleration + percentage**: `python3 scripts/strategy_calc.py
+     velocity --score-now <today's VIX from step 1> --score-prev <T-1 close>
+     --minutes-elapsed 1 --velocity-prev <yesterday's delta from above> --watch-threshold
+     5.0 --accel-watch-threshold 3.0 --pct-watch-threshold 15.0`.
    `--minutes-elapsed 1` in both calls means "1 day-step", NOT one minute — do not pass
    1440; the tool's `notable`/`notable_accel` flags compare against the watch thresholds on
    that same unit, so a real 1440-minute dt would silently dilute a 5+ point jump to ~0.003
    pts/min and neither flag would ever fire. With dt=1, `delta`/`points_per_minute` read
    directly as the day-over-day point change, and `acceleration_pts_per_min2` reads directly
-   as points/day². Journal both the change and the acceleration next to the VIX level.
-   *** DIAGNOSTIC ONLY — does not gate entries, see `vix_change_watch_pts_per_day` and
-   `vix_acceleration_watch_pts_per_day2` in config/strategy.yaml for rationale ***.
+   as points/day². `pct_change` (and `notable_pct`, since `--pct-watch-threshold` is passed)
+   reads as the day-over-day percentage move — meaningful for VIX in a way a fixed point
+   threshold isn't, since a point move means something very different at a low vs high VIX
+   baseline. Journal the change, acceleration, and percentage next to the VIX level.
+   *** DIAGNOSTIC ONLY — does not gate entries, see `vix_change_watch_pts_per_day`,
+   `vix_acceleration_watch_pts_per_day2`, and `vix_change_watch_pct_per_day` in
+   config/strategy.yaml for rationale ***.
 2. Poll minute bars with `get_equity_historicals`:
    `symbols=[SPY,QQQ,IWM]`, `interval=minute`, `bounds=extended`,
    `start_time=<09:00 ET today in UTC>`. Each poll returns the full minute-by-minute
@@ -307,7 +311,7 @@ Positions are NOT flattened. This phase makes them safe to carry overnight.
 
 ```markdown
 # SPY 7DTE Journal — YYYY-MM-DD
-mode: <dry_run|live>  |  settled cash at open: $X  |  VIX: X (prior close X, Δ X pts/day, accel X pts/day², diagnostic only)
+mode: <dry_run|live>  |  settled cash at open: $X  |  VIX: X (prior close X, Δ X pts/day / X%, accel X pts/day², diagnostic only)
 ## Regime
 gap SPY: X% · news veto: none|<reason> · tradeable: yes|no
 ## Volatility baseline

@@ -106,17 +106,20 @@ Skip the entire day, journaling the reason, when any of:
 - A major scheduled macro event lands inside the trade window (FOMC statement,
   CPI/PCE/NFP released after 9:00 ET)
 
-**VIX day-over-day change + acceleration (diagnostic only, added 2026-08-04)** —
-`vix_change_watch_pts_per_day` and `vix_acceleration_watch_pts_per_day2` in config, both
-computed via `strategy_calc.py velocity` at Phase 1 (velocity, then acceleration via
-`--velocity-prev`, same 2nd-derivative mechanism as the sentiment-score diagnostics above).
-`vix_max` is a level gate; it was never actually validated against real historical VIX (the
-June out-of-sample backtest had no VIX data to test it on — see
+**VIX day-over-day change, acceleration, and percentage (diagnostic only, added 2026-08-04)**
+— `vix_change_watch_pts_per_day`, `vix_acceleration_watch_pts_per_day2`, and
+`vix_change_watch_pct_per_day` in config, all computed via `strategy_calc.py velocity` at
+Phase 1 (velocity, then acceleration via `--velocity-prev`, plus `pct_change` via
+`--pct-watch-threshold` — same 2nd-derivative and now percentage mechanism as the
+sentiment-score diagnostics above, with `pct_change` a new field added specifically for
+this). `vix_max` is a level gate; it was never actually validated against real historical
+VIX (the June out-of-sample backtest had no VIX data to test it on — see
 `logs/backtest/2026-06_out_of_sample.md`). A fast VIX *jump*, and especially a jump that is
 itself accelerating day over day, can signal the same mean-reversion/whipsaw regime shift
-that made June lose money, even before the level crosses `vix_max`. Logged, not gating —
-same discipline as the velocity/acceleration diagnostics above: build forward evidence
-before proposing a rule.
+that made June lose money, even before the level crosses `vix_max`. Percentage matters
+alongside points because a fixed point move means something very different at a low VIX
+baseline (10s) than a high one (30s+). Logged, not gating — same discipline as the
+velocity/acceleration diagnostics above: build forward evidence before proposing a rule.
 
 ## Entry rules
 

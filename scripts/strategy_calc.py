@@ -268,6 +268,18 @@ def cmd_velocity(args):
     direction = "up" if delta > 0 else "down" if delta < 0 else "flat"
     notable = pts_per_min is not None and abs(pts_per_min) >= watch
 
+    # Percentage change (added 2026-08-04 for VIX; makes sense for any series where 0 is
+    # not a meaningful/reachable value, e.g. VIX or an option's mid price — NOT the
+    # sentiment score, which crosses zero routinely, making pct change unstable/meaningless
+    # near the crossing. No config default: only becomes "notable" if the caller explicitly
+    # opts in via --pct-watch-threshold (no forced default the way --watch-threshold has,
+    # since there is no scale-appropriate default that would make sense across every series
+    # this command gets reused for).
+    pct_change = round(pct(now, prev), 2) if prev else None
+    notable_pct = None
+    if args.pct_watch_threshold is not None and pct_change is not None:
+        notable_pct = abs(pct_change) >= args.pct_watch_threshold
+
     # Second derivative: acceleration = change in velocity over this same interval.
     # Approximation, not a rigorous continuous derivative — sampling is irregular/noisy
     # and this reuses minutes_elapsed (the current step's dt) rather than the gap
@@ -292,8 +304,10 @@ def cmd_velocity(args):
         "minutes_elapsed": dt,
         "delta": delta,
         "points_per_minute": pts_per_min,
+        "pct_change": pct_change,
         "direction": direction,
         "notable": notable,
+        "notable_pct": notable_pct,
         "velocity_prev": args.velocity_prev,
         "acceleration_pts_per_min2": accel,
         "accel_direction": accel_direction,
@@ -383,6 +397,11 @@ def main():
                    help="override velocity_watch_pts_per_min — for non-score series (e.g. option $)")
     s.add_argument("--accel-watch-threshold", type=float, default=None, dest="accel_watch_threshold",
                    help="override acceleration_watch_pts_per_min2 — for non-score series")
+    s.add_argument("--pct-watch-threshold", type=float, default=None, dest="pct_watch_threshold",
+                   help="pct_change is always reported when score_prev != 0; pass this to also "
+                        "set notable_pct. No config default (unlike --watch-threshold) — pct "
+                        "change isn't meaningful for the sentiment score, only opt-in series "
+                        "like VIX or an option's mid price.")
     s.add_argument("--config", default="config/strategy.yaml")
     s.set_defaults(fn=cmd_velocity)
 

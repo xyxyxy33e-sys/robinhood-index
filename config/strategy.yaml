@@ -108,6 +108,23 @@ signal:
                              # velocity as the --velocity-prev input; see docs/PLAYBOOK.md step 1b.
                              # Unvalidated starting guess, zero backtest evidence, same caveat as
                              # every other *_watch_* parameter in this file.
+  vix_change_watch_pct_per_day: 15.0  # *** DIAGNOSTIC, DOES NOT GATE ENTRIES *** day-over-day
+                             # VIX change as a PERCENTAGE of the prior close, not just points.
+                             # Added 2026-08-04 (owner request, same conversation) — points and
+                             # percent capture different things because VIX's typical range (10s
+                             # to 40s) means a fixed point move is far more significant relatively
+                             # at a low VIX baseline than a high one: +5 pts from a VIX of 12 is
+                             # +41.7% (extreme), +5 pts from a VIX of 30 is +16.7% (still notable,
+                             # less extreme). Required strategy_calc.py velocity to gain a
+                             # `pct_change` field + optional `--pct-watch-threshold` (previously
+                             # velocity only reported absolute delta/points-per-minute) — the new
+                             # field has NO config-driven default the way --watch-threshold does,
+                             # since percentage change is not meaningful for the -100..100
+                             # sentiment score (crosses zero routinely) and must be opted into
+                             # explicitly per call. Pass via `velocity --pct-watch-threshold 15.0`
+                             # alongside the points-based call in docs/PLAYBOOK.md step 1b.
+                             # Unvalidated starting guess, zero backtest evidence, same caveat as
+                             # every other *_watch_* parameter in this file.
                              # Unvalidated starting guess, zero backtest evidence for 5.0 pts/day
                              # specifically, same caveat as every other *_watch_* parameter above.
                              # DIAGNOSTIC ONLY per house convention: log it, do not act on it,
