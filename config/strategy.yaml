@@ -5,10 +5,12 @@
 # live:    orders are placed automatically within the limits below.
 #          Setting "live" is the account owner's standing authorization for
 #          scheduled agent sessions to trade without per-order confirmation.
-mode: dry_run   # Set 2026-07-24 by the owner. The 7DTE / multi-day-hold / no-hard-close
-                # structure has NO backtest support as a whole, and the underlying signal
-                # lost money out-of-sample (June: -$5,100). Dry-run journals every signal
-                # and the exact orders it WOULD place, without touching the account.
+mode: live      # TEMPORARY: switched from dry_run 2026-08-04 09:2x ET by explicit owner
+                # request, for TODAY (2026-08-04) ONLY. Revert to dry_run at end of session
+                # (after Phase 6) regardless of today's outcome. Original dry_run rationale
+                # (set 2026-07-24 by the owner) still applies going forward: the 7DTE /
+                # multi-day-hold / no-hard-close structure has NO backtest support as a
+                # whole, and the underlying signal lost money out-of-sample (June: -$5,100).
 
 account_number: "576391551"   # Robinhood "Agentic" cash account (agentic_allowed=true, option_level_2)
 timezone: America/New_York
