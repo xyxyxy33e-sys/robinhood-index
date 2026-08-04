@@ -68,6 +68,32 @@ signal:
                              # polls stays unlogged, but real movement should now show up.
   option_acceleration_watch_usd_per_min2: 0.005  # as above, 2nd derivative; lowered from
                              # 0.02 on 2026-07-28 for the same reason.
+  vix_change_watch_pts_per_day: 5.0  # *** DIAGNOSTIC, DOES NOT GATE ENTRIES *** day-over-day
+                             # VIX change (points, today's Phase-1 level vs prior day's close)
+                             # worth flagging. Added 2026-08-04 (owner request) after discussing
+                             # the June out-of-sample backtest: the static `vix_max` level gate
+                             # never got tested against real historical VIX (unavailable to that
+                             # backtest), and June's worst 3 days (-$3,761 of the -$5,100 total)
+                             # were flagged only as "plausibly" high-VIX — a LEVEL a filter might
+                             # have caught, not necessarily a JUMP. Rationale for tracking rate of
+                             # change too: a fast VIX spike can signal a regime shift into exactly
+                             # the mean-reversion/whipsaw conditions this momentum-continuation
+                             # signal loses money in (see logs/backtest/2026-06_out_of_sample.md),
+                             # even on a day where the absolute level hasn't crossed vix_max yet.
+                             # Reuses the existing generic `strategy_calc.py velocity` command
+                             # (--score-now <today's VIX> --score-prev <yesterday's close>
+                             # --minutes-elapsed 1 --watch-threshold 5.0) — no new script code.
+                             # NOTE: --minutes-elapsed 1 means "1 day-step", not one minute —
+                             # passing the literal 1440 minutes/day dilutes the per-minute rate
+                             # so `notable` never fires at a sane threshold. See docs/PLAYBOOK.md
+                             # Phase 1 step 1b for the worked-through reasoning.
+                             # Unvalidated starting guess, zero backtest evidence for 5.0 pts/day
+                             # specifically, same caveat as every other *_watch_* parameter above.
+                             # DIAGNOSTIC ONLY per house convention: log it, do not act on it,
+                             # until real evidence justifies promoting it to a gating rule (same
+                             # path consider_exit_pct followed 2026-07-29 -> 2026-07-30). Intraday
+                             # VIX velocity (re-poll during the session, not just once at 9:00 ET)
+                             # is a natural next step if this proves useful — not built yet.
 
 risk:
   max_premium_per_trade_usd: 1000  # max premium outlay on one position

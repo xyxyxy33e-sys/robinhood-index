@@ -102,9 +102,17 @@ proposing a rule.
 
 Skip the entire day, journaling the reason, when any of:
 - |overnight gap| on SPY > `gap_limit_pct` (1.5%) — gap days mean-revert unpredictably
-- VIX > `vix_max` (30) — stops get run by noise
+- VIX > `vix_max` (35) — stops get run by noise
 - A major scheduled macro event lands inside the trade window (FOMC statement,
   CPI/PCE/NFP released after 9:00 ET)
+
+**VIX day-over-day change (diagnostic only, added 2026-08-04)** — `vix_change_watch_pts_per_day`
+in config, computed via `strategy_calc.py velocity` at Phase 1. `vix_max` is a level gate; it
+was never actually validated against real historical VIX (the June out-of-sample backtest had
+no VIX data to test it on — see `logs/backtest/2026-06_out_of_sample.md`). A fast VIX *jump*
+can signal the same mean-reversion/whipsaw regime shift that made June lose money, even before
+the level crosses `vix_max`. Logged, not gating — same discipline as the velocity/acceleration
+diagnostics above: build forward evidence before proposing a rule.
 
 ## Entry rules
 

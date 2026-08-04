@@ -33,6 +33,17 @@ Load config from `config/strategy.yaml` first — never hardcode parameters.
 
 1. At 9:00: `co-invest get_news` — scan for regime-filter events (FOMC, CPI, NFP,
    major geopolitical shock). `get_indexes` / `get_index_quotes` for VIX level.
+1b. **VIX day-over-day change (diagnostic, added 2026-08-04).** Fetch VIX's prior daily
+   close via `get_index_historicals` (interval=day, ~5 calendar days back, take the last
+   completed bar) and run `python3 scripts/strategy_calc.py velocity --score-now <today's
+   VIX from step 1> --score-prev <prior close> --minutes-elapsed 1 --watch-threshold 5.0`.
+   `--minutes-elapsed 1` here means "1 day-step", NOT one minute — do not pass 1440; the
+   tool's `notable` flag compares against `watch-threshold` on that same unit, so a real
+   1440-minute dt would silently dilute a 5+ point day-over-day jump to ~0.003 pts/min and
+   `notable` would almost never fire. With dt=1, `delta` and `points_per_minute` both read
+   directly as the day-over-day point change. Journal the result next to the VIX level.
+   *** DIAGNOSTIC ONLY — does not gate entries, see `vix_change_watch_pts_per_day` in
+   config/strategy.yaml for rationale ***.
 2. Poll minute bars with `get_equity_historicals`:
    `symbols=[SPY,QQQ,IWM]`, `interval=minute`, `bounds=extended`,
    `start_time=<09:00 ET today in UTC>`. Each poll returns the full minute-by-minute
@@ -287,7 +298,7 @@ Positions are NOT flattened. This phase makes them safe to carry overnight.
 
 ```markdown
 # SPY 7DTE Journal — YYYY-MM-DD
-mode: <dry_run|live>  |  settled cash at open: $X  |  VIX: X
+mode: <dry_run|live>  |  settled cash at open: $X  |  VIX: X (prior close X, Δ X pts/day, diagnostic only)
 ## Regime
 gap SPY: X% · news veto: none|<reason> · tradeable: yes|no
 ## Volatility baseline
