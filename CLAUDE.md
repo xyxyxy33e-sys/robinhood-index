@@ -11,6 +11,16 @@ it changed.
   never improvise these numbers.
 - Working branch for everything (code + daily journals):
   `claude/robinhood-day-options-strategy-y8eskp`. The default branch may be empty.
+- **This account is shared with other independently-operated agentic strategies**
+  (confirmed by the owner 2026-08-06) — at least one other agent trades single-stock
+  options in parallel on the same account (e.g. Unity/U calls seen 2026-08-06,
+  chain_id `55c8d94d-b46d-4dcb-abd0-db92b7eb04fa`). Positions/orders on tickers
+  outside `universe:` in `config/strategy.yaml` are NOT this strategy's — do not
+  manage, cancel, or replace them. If one of those positions has a real safety gap
+  (e.g. a `gfd` stop that will leave it unprotected overnight), flag it clearly to
+  the account owner and journal it as an out-of-scope observation, but do not act
+  on it — this strategy has no authorization over other strategies' orders. See
+  `logs/journal/2026-08-06.md` for the full incident writeup and how it resolved.
 
 ## Hard invariants (these replaced the old 0DTE "flat by 13:00" rule)
 1. **Every open position must carry a WORKING GTC stop-market order at all times.**
