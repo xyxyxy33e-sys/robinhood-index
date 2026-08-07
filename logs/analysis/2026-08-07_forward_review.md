@@ -79,15 +79,19 @@ to liquidity is a large fraction of total opportunity. Slightly relaxing OI
 or checking adjacent strikes/expiries is the highest-leverage tweak
 available.
 
-### 6. Signal-decay diagnostic keeps looking better than it is allowed
-to be.
-Directionally right on all three losses: 07-28 (decay exit would have saved
-~$122), 07-29 (triggered 43 min before the stop), 08-07 (triggered 12:29 ET,
-2h18m before the stop, score eventually sign-flipped). It never fired
-spuriously on a winner. The decision to keep it diagnostic-only rested on 4
-backtest trades (`signal_decay_test.md`); the forward sample is now 3-for-3
-in its favor on losers. Still small, but it is accumulating exactly the
-evidence the original decision said it needed.
+### 6. Signal-decay diagnostic: forward evidence is MIXED, not clean —
+keep it diagnostic. (Corrected 2026-08-07: an earlier draft of this
+finding wrongly claimed it never fired on a winner.)
+It triggered on all three losses well before their stops: 07-28 (exit at
+trigger would have saved ~$122), 07-29 (triggered 43 min before the stop),
+08-07 (triggered 12:29 ET, 2h18m before the stop, ~$76 saved at trigger
+price; score eventually sign-flipped). BUT it also triggered mid-trade on
+the 07-30 WINNER (11:13–11:32 ET, score bottomed +8.9 while the position
+was ~−20% underwater) — that trade recovered fully and exited at the +30%
+TP. Acting on decay there would have cost ~$338, roughly canceling the
+combined savings on the losers. Net forward impact of promoting decay to a
+gating exit ≈ flat to slightly negative on this sample. The original
+caution in `signal_decay_test.md` stands: keep logging, do not promote.
 
 ### 7. The "swing" part of the swing strategy has never actually been
 tested.
@@ -123,4 +127,5 @@ impact). This journal ledger is the only reliable per-strategy record.
 2. min_open_interest 500 — costing a large share of scarce signals.
 3. Trailing stop parameters — never engaged; likely redundant under 30% TP.
 4. Put-side performance in an uptrend — 0/2; too few to act on, keep watching.
-5. Signal decay — keep logging; forward evidence trending toward promotion.
+5. Signal decay — keep logging only; forward evidence mixed (helped 3
+   losers but would have killed the 07-30 winner; net ≈ flat).
