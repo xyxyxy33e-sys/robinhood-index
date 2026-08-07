@@ -166,32 +166,37 @@ risk:
                                    # (nothing ever got close to either target that week) — see
                                    # logs/backtest/take_profit_30pct_test.md. 22 trades, thin;
                                    # not treated as settled.
-  consider_exit_pct: 10            # *** REAL, GATING RULE as of 2026-07-30 (owner decision) ***
-                                   # first unrealized-gain checkpoint. Was diagnostic-only
-                                   # 2026-07-29 -> 2026-07-30 (logged, never acted on); promoted
-                                   # to a real trailing-stop ACTIVATION trigger after the
-                                   # 2026-07-30 SPY 738C crossed +10% at 13:01 ET and did not
-                                   # exit until +32% five hours later — a live case for capturing
-                                   # some of that gap rather than only journaling it. Once
-                                   # unrealized gain first crosses this level, the resting stop
-                                   # tightens off the -28% floor to trail the peak — see
-                                   # `trail_stop_distance_pct` below and `strategy_calc.py stops
-                                   # --fill F --peak P`. Still an unvalidated starting guess, not
-                                   # a tuned threshold — zero backtest evidence for +10% as an
-                                   # activation level, same caveat as velocity_watch_pts_per_min
-                                   # above; only now it gates something real, so re-tune if it
-                                   # proves too trigger-happy.
-  trail_stop_distance_pct: 14      # *** REAL, GATING RULE, added 2026-07-30 (owner decision) ***
-                                   # once the trailing stop is active (see consider_exit_pct),
-                                   # the effective stop sits this many percentage points (of
-                                   # fill-relative gain) behind the highest unrealized gain
-                                   # reached since activation, and only ever moves up. Chosen as
-                                   # half of the original -28% stop width (stop_trigger_frac) —
-                                   # tighter than the initial stop since it is now protecting
-                                   # profit rather than absorbing entry volatility, but with
-                                   # enough room to avoid getting shaken out by ordinary chop.
-                                   # Unvalidated starting guess, zero backtest evidence, same
-                                   # caveat as consider_exit_pct above.
+  # TRAILING STOP REMOVED 2026-08-07 (owner decision — "proceed with takeaway 2",
+  # logs/analysis/2026-08-07_forward_review.md finding 4). The consider_exit_pct
+  # (+10% activation) / trail_stop_distance_pct (14pp trail) pair that lived here
+  # was live 2026-07-30 -> 2026-08-07 and NEVER FIRED in 8 forward trades: in the
+  # 5 winners the +30% take_profit always arrived first, and in the 3 losers the
+  # peak never reached the +10% activation. Under a +30% TP it is mathematically
+  # near-dead code: activation +10% with a 14pp trail only locks in better than
+  # breakeven when peak gain > +24%, and TP fires at +30% — the protective band
+  # is a sliver. Exits are now: static -28% stop (stop_trigger_frac), +30%
+  # take_profit, time stop / DTE floor, daily halt, and the EOD carry gate below.
+  # If a future re-parameterization is wanted (e.g. lower activation), it needs a
+  # real backtest first — a tighter trail would likely have killed the 2026-07-30
+  # winner during its -20% trough en route to +32%.
+  eod_carry_min_unrealized_pct: -14  # *** REAL, GATING RULE, added 2026-08-07 (owner decision —
+                                   # "proceed with takeaway 3") *** Phase 5 overnight-carry gate:
+                                   # at the 15:45 ET verification, any open position whose
+                                   # unrealized P&L is at or below this level is CLOSED before
+                                   # 16:00 (cancel stop, bid-pegged limit) instead of carried
+                                   # overnight. Rationale: a position this far down has under
+                                   # half the -28% stop width left as cushion, and June data
+                                   # showed overnight gaps filling stops as bad as -56/-58%
+                                   # (logs/backtest/take_profit_30pct_test.md — 27% of stop
+                                   # fills meaningfully through the trigger). -14 chosen as half
+                                   # the stop width (same convention as the removed 14pp trail).
+                                   # Positions above the floor carry as designed with the GTC
+                                   # stop. Unvalidated starting guess, zero backtest evidence
+                                   # for -14 specifically; journal every gate decision. Computed
+                                   # as `eod_carry_floor` by `strategy_calc.py stops --fill F`.
+                                   # NOTE: no position has ever actually carried overnight yet
+                                   # (all 8 forward trades resolved intraday) — this rule exists
+                                   # so the first carry decision is principled, not improvised.
 
 monitoring:
   interval_open_minutes: 1    # wake every minute while any position is open
@@ -212,7 +217,15 @@ contract:
   target_delta_max: 0.55    # tested in logs/backtest/dte_comparison.md. Use real greeks
                             # from get_option_quotes; do not reuse the 0DTE strike offsets.
   max_spread_pct_of_mid: 10 # skip contracts with wide bid/ask
-  min_open_interest: 500
+  min_open_interest: 250    # Lowered from 500 on 2026-08-07 (owner decision — "proceed with
+                            # takeaway 1", logs/analysis/2026-08-07_forward_review.md finding 5).
+                            # At 500 the filter killed or delayed ~3 of only ~11 genuine
+                            # threshold crossings in the 7/24-8/7 forward period, including
+                            # 2026-08-05's ONLY qualifying signal (all four delta-band strikes
+                            # rejected at OI 331/267/214/168 — two of those pass at 250). The
+                            # spread (max_spread_pct_of_mid) and min_volume checks below are the
+                            # filters that actually protect fill quality and are unchanged.
+                            # Watch forward: if fills degrade at OI 250-500 contracts, revert.
   min_volume: 100
 
 cash_account:

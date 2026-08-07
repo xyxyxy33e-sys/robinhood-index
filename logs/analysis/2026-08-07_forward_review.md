@@ -124,8 +124,35 @@ impact). This journal ledger is the only reliable per-strategy record.
 ## Open questions ranked (as of 2026-08-07)
 
 1. Overnight/gap behavior — untested forward; top backtest-flagged risk.
+   → ADDRESSED same day, see Decisions below (EOD carry gate).
 2. min_open_interest 500 — costing a large share of scarce signals.
+   → ADDRESSED same day, see Decisions below (lowered to 250).
 3. Trailing stop parameters — never engaged; likely redundant under 30% TP.
+   → ADDRESSED same day, see Decisions below (removed).
 4. Put-side performance in an uptrend — 0/2; too few to act on, keep watching.
 5. Signal decay — keep logging only; forward evidence mixed (helped 3
    losers but would have killed the 07-30 winner; net ≈ flat).
+
+## Decisions taken (2026-08-07 post-close, owner-directed)
+
+The owner reviewed this document and directed adoption of takeaways 1–3
+("Proceed with 123"). Implemented same evening across
+`config/strategy.yaml`, `scripts/strategy_calc.py`, `docs/PLAYBOOK.md`,
+`docs/STRATEGY.md`, and `CLAUDE.md`:
+
+1. **`min_open_interest` 500 → 250.** Spread (≤10% of mid) and volume
+   (≥100) filters unchanged — they are the real fill-quality guards. Watch
+   forward; revert if fills degrade on OI 250–500 contracts.
+2. **Trailing stop removed** (`consider_exit_pct` / `trail_stop_distance_pct`
+   deleted from config; `stops --peak` now diagnostic-only, `effective_stop`
+   always the static −28% `stop_trigger`). Any future re-parameterization
+   requires a backtest first.
+3. **EOD carry gate added** (`eod_carry_min_unrealized_pct: -14`, i.e.
+   `eod_carry_floor` = fill × 0.86): at Phase 5 (15:45 ET) an open position
+   at or below −14% unrealized is closed before 16:00 instead of carried
+   overnight. −14 = half the stop width; unvalidated starting guess, adopted
+   before the first-ever overnight carry so the decision is principled
+   rather than improvised. Journal every gate decision.
+
+Per house convention all three are flagged unvalidated-forward; the next
+review should score them against the trades they actually touch.

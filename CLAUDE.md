@@ -26,21 +26,25 @@ it changed.
 1. **Every open position must carry a WORKING GTC stop-market order at all times.**
    With no intraday hard close, this is the only protection a position has. A `gfd`
    stop expires at the close and leaves the position naked overnight — never use one.
-2. Positions are held across sessions. Exit on: **trailing stop** (see below),
-   +30% target, `max_hold_trading_days` (3), or `min_dte_at_exit` (3 DTE) —
-   whichever hits first. (Take-profit lowered from +60% on 2026-07-29 — see
-   `docs/STRATEGY.md`.)
-   **Trailing stop (real, gating rule as of 2026-07-30 — owner decision):**
-   the resting stop starts at −28% (`stop_trigger_frac`). Once unrealized gain
-   first crosses `consider_exit_pct` (+10%), the stop TIGHTENS to trail the
-   peak unrealized gain, staying `trail_stop_distance_pct` (14 points) behind
-   the highest gain reached since activation — it only ever moves up. Compute
-   both levels with `strategy_calc.py stops --fill F --peak P`
-   (`effective_stop` is the number to actually use). `consider_exit_pct` was
-   diagnostic-only 2026-07-29→2026-07-30; it is a real activation trigger now.
-   If the trailing stop fills, re-entry is permitted under the normal
-   re-entry rules if the signal still qualifies. Signal decay remains
-   diagnostic-only — log it, never act on it.
+2. Positions are held across sessions. Exit on: **static −28% stop**
+   (`stop_trigger_frac` — the resting stop is NEVER moved), +30% target,
+   `max_hold_trading_days` (3), `min_dte_at_exit` (3 DTE), or the **EOD carry
+   gate** (below) — whichever hits first. (Take-profit lowered from +60% on
+   2026-07-29; **trailing stop REMOVED 2026-08-07, owner decision** — it never
+   fired in 8 forward trades and was near-redundant under the +30% TP; see
+   `logs/analysis/2026-08-07_forward_review.md`. `consider_exit_pct` /
+   `trail_stop_distance_pct` no longer exist in config; `stops --peak` is
+   diagnostic-only now.)
+   **EOD carry gate (real, gating rule — added 2026-08-07, owner decision):**
+   at Phase 5 (15:45 ET), an open position whose mid is at or below
+   `eod_carry_floor` (fill × 0.86; config `eod_carry_min_unrealized_pct: -14`,
+   from `strategy_calc.py stops --fill F`) is CLOSED before 16:00 instead of
+   carried overnight — too little cushion to the −28% stop against a gap
+   through the trigger. Positions above the floor carry as designed.
+   If a stop fills, re-entry is permitted under the normal re-entry rules if
+   the signal still qualifies. Signal decay remains diagnostic-only — log it,
+   never act on it (forward evidence is mixed: helped 3 losers, would have
+   killed the 2026-07-30 winner).
 3. No entries after 11:30 ET. Never exceed the `risk:` limits.
 4. At most ONE open position at a time (`max_concurrent_positions: 1`), so total
    exposure is capped at `max_premium_per_trade_usd` ($1,000).

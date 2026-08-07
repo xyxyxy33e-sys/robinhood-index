@@ -23,21 +23,25 @@ size --price ASK --budget USD
     Contracts affordable at ASK (per-share premium) within the budget. 0 = skip.
 
 stops --fill AVG_FILL [--peak PEAK_PRICE] [--config ...]
-    Stop trigger and take-profit prices for a filled long option. The stop is a
-    stop-MARKET order, so there is no limit floor to compute. Also returns
-    consider_exit (config `consider_exit_pct`, default 10%).
+    Stop trigger, take-profit and EOD carry floor for a filled long option. The
+    stop is a stop-MARKET order, so there is no limit floor to compute.
 
-    consider_exit is a REAL, GATING trailing-stop ACTIVATION level as of
-    2026-07-30 (previously diagnostic-only 2026-07-29 -> 2026-07-30). Pass
-    --peak (the highest price the position has reached since entry) to compute
-    the trailing stop: once peak's unrealized gain first reaches consider_exit_pct,
-    the effective stop tightens off the original stop_trigger to sit
-    `trail_stop_distance_pct` (config, default 14) percentage points behind the
-    peak's gain, and only ever moves up as new peaks are made. Without --peak,
-    only the static stop_trigger/take_profit/consider_exit levels are returned
-    (e.g. for a not-yet-filled sizing check). Only stop_trigger, take_profit,
-    and (once active) the trailing stop are real, gating exits — signal decay
-    remains diagnostic-only.
+    TRAILING STOP REMOVED 2026-08-07 (owner decision): the consider_exit_pct
+    (+10%) activation / trail_stop_distance_pct (14pp) mechanism that was live
+    2026-07-30 -> 2026-08-07 never fired in 8 forward trades and is
+    near-redundant under the +30% take_profit (its trail only beats breakeven
+    when peak gain > +24%, but TP fires at +30%) — see
+    logs/analysis/2026-08-07_forward_review.md finding 4. `effective_stop` is
+    now ALWAYS the static stop_trigger; the resting stop is never moved. --peak
+    still reports peak_gain_pct, but as a diagnostic only.
+
+    eod_carry_floor (config `eod_carry_min_unrealized_pct`, default -14%) is
+    the Phase 5 overnight-carry gate added 2026-08-07: a position at or below
+    this unrealized loss at the 15:45 ET verification is closed before 16:00
+    instead of carried overnight (gap-through-stop risk — see
+    logs/backtest/take_profit_30pct_test.md). Only stop_trigger, take_profit,
+    the time stop / DTE floor, the daily halt and the EOD carry gate are real,
+    gating exits — signal decay remains diagnostic-only.
 
 decay --entry-score X --current-score Y [--floor 20]
     Signal-decay check for an OPEN position: has the thesis that justified the entry
@@ -105,8 +109,7 @@ DEFAULTS = {
     "vix_max": 30.0,
     "stop_trigger_frac": 0.72,
     "take_profit_pct": 30.0,
-    "consider_exit_pct": 10.0,
-    "trail_stop_distance_pct": 14.0,
+    "eod_carry_min_unrealized_pct": -14.0,
     "velocity_watch_pts_per_min": 1.0,
     "acceleration_watch_pts_per_min2": 0.5,
     "option_velocity_watch_usd_per_min": 0.01,
@@ -345,25 +348,17 @@ def cmd_stops(args):
         "take_profit": round(args.fill * (1 + take_profit_pct / 100.0), 2),
         "take_profit_pct_used": take_profit_pct,
         "max_loss_at_trigger_pct": round((1 - cfg["stop_trigger_frac"]) * 100, 1),
-        "consider_exit": round(args.fill * (1 + cfg["consider_exit_pct"] / 100.0), 2),
-        "consider_exit_note": "REAL - trailing-stop activation level as of 2026-07-30 (pass --peak to compute the trailing stop)",
+        "eod_carry_floor": round(args.fill * (1 + cfg["eod_carry_min_unrealized_pct"] / 100.0), 2),
+        "eod_carry_note": "REAL - Phase 5 (15:45 ET) overnight-carry gate added 2026-08-07: "
+                          "mid <= eod_carry_floor -> close before 16:00 instead of carrying",
+        "effective_stop": stop_trigger,
     }
     if args.peak is not None:
-        peak_gain_pct = pct(args.peak, args.fill)
         out["peak"] = args.peak
-        out["peak_gain_pct"] = round(peak_gain_pct, 2)
-        active = peak_gain_pct >= cfg["consider_exit_pct"]
-        out["trailing_stop_active"] = active
-        if active:
-            trail_gain_pct = peak_gain_pct - cfg["trail_stop_distance_pct"]
-            trailing_stop = round(args.fill * (1 + trail_gain_pct / 100.0), 2)
-            out["trailing_stop"] = trailing_stop
-            out["trail_stop_distance_pct_used"] = cfg["trail_stop_distance_pct"]
-            out["effective_stop"] = round(max(trailing_stop, stop_trigger), 2)
-        else:
-            out["effective_stop"] = stop_trigger
-    else:
-        out["effective_stop"] = stop_trigger
+        out["peak_gain_pct"] = round(pct(args.peak, args.fill), 2)
+        out["peak_note"] = ("DIAGNOSTIC ONLY - trailing stop REMOVED 2026-08-07 (never fired in "
+                            "8 forward trades; near-redundant under +30% take_profit). The "
+                            "resting stop stays at stop_trigger for the life of the position.")
     print(json.dumps(out, indent=2))
 
 
@@ -420,10 +415,10 @@ def main():
                          "so it remains an apples-to-apples comparison. See "
                          "logs/backtest/dte_comparison.md.")
     s.add_argument("--peak", type=float, default=None,
-                    help="highest price reached since entry — computes the trailing stop "
-                         "(effective_stop/trailing_stop/trailing_stop_active) once "
-                         "consider_exit_pct has been crossed. Omit for a static/pre-fill "
-                         "check with no trailing-stop computation.")
+                    help="highest price reached since entry — reports peak_gain_pct as a "
+                         "DIAGNOSTIC only (trailing stop removed 2026-08-07; effective_stop "
+                         "is always the static stop_trigger). Omit for a static/pre-fill "
+                         "check.")
     s.set_defaults(fn=cmd_stops)
 
     args = p.parse_args()
