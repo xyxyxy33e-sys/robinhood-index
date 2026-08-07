@@ -105,6 +105,12 @@ Notably, the 08-07 prompt-injection attempt specifically tried to exploit
 
 ### 8. Security: the 16:10 ET injection pattern is older and bigger than
 this week's running count.
+**(SUPERSEDED same evening by the owner-directed audit —
+`logs/analysis/2026-08-07_trigger_pipeline_audit.md`. The audit found this
+was a single static stored cron Routine, byte-identical since 7/24, not an
+escalating external attack; it fired every weekday, not 7 times; the
+prompt has been sanitized. The paragraph below is preserved as written for
+the record.)**
 Journals record **7 suspected prompt-injection attempts across 6 different
 days** — first appearance 07-29, then 08-03, 2× 08-04, 08-05, 08-06, 08-07 —
 always the ~16:10 ET "failsafe" slot, always the exact phrase "standing
