@@ -130,6 +130,20 @@ velocity/acceleration diagnostics above: build forward evidence before proposing
    flip sign within 15 minutes.
 2. Signal gate, per symbol: |symbol score| ≥ `entry_threshold` (40). Every qualifying
    symbol is a candidate — calls and puts may be held simultaneously.
+2b. Persistence gate (**REAL, gating — added 2026-08-07, owner decision**):
+   |score| must have held ≥ `entry_threshold` with the same sign for
+   `entry_persistence_min` (3) consecutive minutes, measured on backfilled
+   1-minute bars via `strategy_calc.py persistence` (cadence-independent — a
+   sparsely-polling session backfills bars and evaluates the trailing minute
+   series). Motivation: minute-level replay of the 7/24–8/7 forward period
+   showed every winning entry's signal held ≥40 for 10+ consecutive minutes
+   while 1–2-minute spikes were noise; P=3 is the owner's explicit
+   chase-vs-filter tradeoff (delays winners only 2–4 min). Stricter 15–30-min
+   confirmation was tested on June/July and rejected — its apparent gains were
+   quantization noise and regime artifacts, and it delayed July's only correct
+   entry into a loser (`logs/backtest/entry_confirmation_test.md`). Blocked
+   signals are journaled with their hypothetical outcomes and do not consume a
+   trade slot.
 3. Direction per symbol: score > 0 → **call**, score < 0 → **put**. At most one open
    position per symbol at a time; open candidates in order of |score| until
    `max_concurrent_positions` or `max_total_premium_usd` is reached.

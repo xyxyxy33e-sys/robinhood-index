@@ -45,6 +45,10 @@ it changed.
    the signal still qualifies. Signal decay remains diagnostic-only — log it,
    never act on it (forward evidence is mixed: helped 3 losers, would have
    killed the 2026-07-30 winner).
-3. No entries after 11:30 ET. Never exceed the `risk:` limits.
+3. No entries after 11:30 ET (11:30:00 inclusive, later exclusive). Entries also
+   require the **persistence gate** (added 2026-08-07, owner decision): |score| ≥
+   `entry_threshold` for `entry_persistence_min` (3) consecutive minutes, same
+   sign, verified on backfilled 1-minute bars via `strategy_calc.py persistence`
+   — never on sparse polling checks alone. Never exceed the `risk:` limits.
 4. At most ONE open position at a time (`max_concurrent_positions: 1`), so total
    exposure is capped at `max_premium_per_trade_usd` ($1,000).

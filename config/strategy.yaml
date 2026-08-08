@@ -44,6 +44,26 @@ schedule:            # all times US/Eastern
 
 signal:
   entry_threshold: 40       # |symbol score| needed to trade that symbol (score range -100..+100)
+  entry_persistence_min: 3  # *** REAL, GATING RULE, added 2026-08-07 (owner decision: "Make P=3
+                            # for now, the longer it waits, is avoiding the upward trend") ***
+                            # An entry additionally requires |score| >= entry_threshold for this
+                            # many CONSECUTIVE minutes (same sign), measured on BACKFILLED
+                            # 1-minute bars via `strategy_calc.py persistence` — NOT on polling
+                            # checks (a session polling every ~7 min must backfill minute bars and
+                            # evaluate the trailing series at each entry check; the gate is
+                            # cadence-independent by construction). Entry at/after the P-th
+                            # qualifying minute, never after entry_latest (11:30:00 ET inclusive,
+                            # later exclusive). Motivation: minute-level replay of 7/24-8/7 showed
+                            # every winning entry's signal held >=40 for 10+ consecutive minutes,
+                            # while 1-2 minute spikes (8/6 10:18 +41.7, 8/7 10:25 +40.8) were
+                            # noise; on that sample P=3 delays winners only 2-4 minutes and
+                            # filters the pure spikes. P=3 (not a stricter 10-15) is the owner's
+                            # explicit chase-vs-filter tradeoff: the June/July checkpoint
+                            # backtests (logs/backtest/entry_confirmation_test.md) showed STRICT
+                            # 15-30 min confirmation is unsupported — its apparent gains are
+                            # noise/regime artifacts and it delayed July's only correct entry
+                            # into a loser. Unvalidated at exactly P=3 beyond the forward replay;
+                            # same caveat as every recently-adopted parameter.
   gap_limit_pct: 1.5        # skip the day if overnight gap exceeds this (unstable regime)
   vix_max: 35               # skip the day if VIX is above this
   per_symbol_entries: true  # each universe symbol qualifies independently, in its own direction

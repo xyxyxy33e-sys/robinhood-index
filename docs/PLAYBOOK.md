@@ -100,7 +100,20 @@ Load config from `config/strategy.yaml` first — never hardcode parameters.
 1. Compute final scores. The `signal.entries` list from `strategy_calc.py score`
    holds every symbol whose |score| ≥ `entry_threshold` (strongest first), each with
    its own direction — calls and puts may be opened simultaneously. Apply the news
-   veto, then open positions in list order until `max_concurrent_positions` (one per
+   veto, **then the persistence gate (REAL, gating — added 2026-08-07, owner
+   decision)**: backfill the day's 1-minute bars up to now and run
+   `strategy_calc.py persistence --input <bars.json>` — the entry may proceed only
+   if `entry_gate_met` is true, i.e. |score| has held ≥ `entry_threshold` with the
+   same sign for `entry_persistence_min` (3) consecutive minutes. This is measured
+   on the minute-bar series, NOT on polling checks, so backfill before evaluating;
+   entry must still be at or before `entry_latest` (11:30:00 ET inclusive, later
+   exclusive). When the gate BLOCKS an otherwise-qualifying signal, journal the
+   blocked entry (time, score, run length) in the "Entry & blocked-signal extremity
+   tracking" table with status `blocked - persistence gate`, and track its
+   hypothetical outcome like a shadow trade — that record is the forward evidence
+   for re-tuning P (see `logs/backtest/entry_confirmation_test.md`). A
+   persistence-blocked signal does not consume a `max_trades_per_day` slot. Then
+   open positions in list order until `max_concurrent_positions` (one per
    symbol) or `max_total_premium_usd` is hit.
    - Empty list → schedule re-checks every `interval_flat_minutes` until
      `entry_latest` (11:30); each re-check repeats this phase. After 11:30 →

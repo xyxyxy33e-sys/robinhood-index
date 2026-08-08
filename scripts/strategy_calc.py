@@ -22,6 +22,21 @@ score --input bars.json [--config config/strategy.yaml]
 size --price ASK --budget USD
     Contracts affordable at ASK (per-share premium) within the budget. 0 = skip.
 
+persistence --input bars.json [--config ...] [--symbol S] [--minutes P]
+    REAL, GATING entry condition (added 2026-08-07, owner decision). The entry
+    signal must hold |score| >= entry_threshold for `entry_persistence_min`
+    (config, default 3) CONSECUTIVE minutes with the same sign, measured on
+    backfilled 1-minute bars — NOT on polling checks, so a session polling every
+    few minutes must backfill the minute bars and run this before entering.
+    Returns trailing_qualifying_run_min, direction, and entry_gate_met as of the
+    latest bar. Rationale: minute-level replay of the 7/24-8/7 forward period
+    showed 1-2 minute score spikes (2026-08-06 10:18, 2026-08-07 10:25) are
+    noise, while every winning entry's signal held for 10+ minutes; P=3 chosen
+    by the owner to bias toward catching trend entries early (delays winners
+    2-4 min on the forward sample) over maximal spike filtering. See
+    logs/backtest/entry_confirmation_test.md. Entry must still be at or before
+    entry_latest (11:30:00 ET inclusive).
+
 stops --fill AVG_FILL [--peak PEAK_PRICE] [--config ...]
     Stop trigger, take-profit and EOD carry floor for a filled long option. The
     stop is a stop-MARKET order, so there is no limit floor to compute.
@@ -110,6 +125,7 @@ DEFAULTS = {
     "stop_trigger_frac": 0.72,
     "take_profit_pct": 30.0,
     "eod_carry_min_unrealized_pct": -14.0,
+    "entry_persistence_min": 3.0,
     "velocity_watch_pts_per_min": 1.0,
     "acceleration_watch_pts_per_min2": 0.5,
     "option_velocity_watch_usd_per_min": 0.01,
@@ -128,7 +144,7 @@ def load_config(path):
     try:
         with open(path) as f:
             for line in f:
-                m = re.match(r"\s*([a-z_]+):\s*([0-9.]+)\s*(#.*)?$", line)
+                m = re.match(r"\s*([a-z_]+):\s*(-?[0-9.]+)\s*(#.*)?$", line)
                 if m and m.group(1) in cfg:
                     cfg[m.group(1)] = float(m.group(2))
     except FileNotFoundError:
@@ -362,6 +378,78 @@ def cmd_stops(args):
     print(json.dumps(out, indent=2))
 
 
+def cmd_persistence(args):
+    """REAL, GATING entry condition (added 2026-08-07, owner decision): the entry
+    signal must hold |score| >= entry_threshold for `entry_persistence_min`
+    CONSECUTIVE minutes (same sign), measured on backfilled 1-minute bars — not
+    on polling checks, so the gate is polling-cadence-independent. This command
+    computes the trailing qualifying run from the same bars.json the score
+    command uses and says whether the gate is met as of the latest bar."""
+    cfg = load_config(args.config)
+    P = args.minutes if args.minutes is not None else int(cfg["entry_persistence_min"])
+    threshold = cfg["entry_threshold"]
+    with open(args.input) as f:
+        data = json.load(f)
+    sym = args.symbol or sorted(data["symbols"].keys())[0]
+    payload = data["symbols"][sym]
+    bars = sorted(payload["bars"], key=lambda b: b["t"])
+
+    def is_reg(b):
+        ts = datetime.fromisoformat(b["t"].replace("Z", "+00:00")).astimezone(ET)
+        return ts.timetz().replace(tzinfo=None) >= time(9, 31)
+
+    # Only regular-session cutoffs count: pre-9:31 scores are a different regime
+    # (gap+premarket only, systematically inflated) and must not seed a run.
+    reg_ts = [b["t"] for b in bars if is_reg(b)]
+    out = {"symbol": sym, "persistence_required_min": P, "entry_threshold": threshold}
+    lookback = max(P + 5, 45)
+    tail = reg_ts[-lookback:] if reg_ts else []
+    if not tail:
+        out.update({"as_of": bars[-1]["t"] if bars else None, "score_as_of": None,
+                    "direction": None, "trailing_qualifying_run_min": 0,
+                    "run_started_at": None, "entry_gate_met": False,
+                    "note": "no regular-session bars yet - gate cannot be met pre-open"})
+        print(json.dumps(out, indent=2))
+        return
+    scores = {}
+    for t in tail:
+        cut = [b for b in bars if b["t"] <= t]
+        scores[t] = score_symbol(payload["prior_close"], cut)["score"]
+    last = tail[-1]
+    s_last = scores[last]
+    sign = 1 if s_last >= threshold else (-1 if s_last <= -threshold else 0)
+    run_start = None
+    if sign:
+        run_start = last
+        for t in reversed(tail[:-1]):
+            s = scores[t]
+            if (sign > 0 and s >= threshold) or (sign < 0 and s <= -threshold):
+                run_start = t
+            else:
+                break
+    if run_start:
+        t0 = datetime.fromisoformat(run_start.replace("Z", "+00:00"))
+        t1 = datetime.fromisoformat(last.replace("Z", "+00:00"))
+        run_min = int((t1 - t0).total_seconds() // 60) + 1
+    else:
+        run_min = 0
+    out.update({
+        "as_of": last,
+        "score_as_of": s_last,
+        "direction": ("call" if sign > 0 else "put") if sign else None,
+        "trailing_qualifying_run_min": run_min,
+        "run_started_at": run_start,
+        "entry_gate_met": bool(sign) and run_min >= P,
+        "run_hit_lookback_limit": bool(run_start == tail[0] and len(reg_ts) > len(tail)),
+        "note": ("REAL - entry persistence gate (added 2026-08-07, owner decision). Entry "
+                 "additionally requires entry time <= entry_latest (11:30:00 ET inclusive, "
+                 "later exclusive). Wall-clock minutes: bars missing INSIDE an otherwise "
+                 "unbroken qualifying streak count toward the run (no disqualifying "
+                 "observation breaks it)."),
+    })
+    print(json.dumps(out, indent=2))
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -404,6 +492,15 @@ def main():
     s.add_argument("--closes", required=True,
                    help="comma-separated daily closes, oldest first (>= 21 for rv20)")
     s.set_defaults(fn=cmd_rvol)
+
+    s = sub.add_parser("persistence")
+    s.add_argument("--input", required=True, help="bars.json (same schema as score)")
+    s.add_argument("--config", default=None)
+    s.add_argument("--symbol", default=None,
+                   help="symbol key inside bars.json (default: first alphabetically)")
+    s.add_argument("--minutes", type=int, default=None,
+                   help="override entry_persistence_min from config (default: config value)")
+    s.set_defaults(fn=cmd_persistence)
 
     s = sub.add_parser("stops")
     s.add_argument("--fill", type=float, required=True, help="avg fill, per share")
