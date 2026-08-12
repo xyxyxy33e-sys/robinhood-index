@@ -5,7 +5,19 @@
 # live:    orders are placed automatically within the limits below.
 #          Setting "live" is the account owner's standing authorization for
 #          scheduled agent sessions to trade without per-order confirmation.
-mode: dry_run   # Reverted 2026-08-04 16:10 ET (Phase 6) per the standing end-of-day
+mode: live      # Set live 2026-08-12 ~09:3x ET per explicit owner instruction in-session
+                # ("turn today into live run") — scoped to TODAY ONLY per the standing
+                # end-of-day agreement below; will be reverted to dry_run at Phase 6
+                # tonight regardless of outcome, same as the 2026-08-04 precedent.
+                # Risk limits (max_premium_per_trade_usd $1,000, max_concurrent_positions 1,
+                # max_trades_per_day 6, daily_loss_halt_usd $1,000) and every hard invariant
+                # in CLAUDE.md (working GTC stop at all times, persistence gate P=3, EOD
+                # carry gate, static -28% stop never moved) apply identically in live mode —
+                # nothing about today's approval changes the trading rules, only whether
+                # orders are actually placed.
+                #
+                # --- history ---
+                # Reverted 2026-08-04 16:10 ET (Phase 6) per the standing end-of-day
                 # agreement: the 2026-08-04 live window was explicit, owner-approved, and
                 # scoped to that day only. Result: 2 real trades, both take_profit winners
                 # (SPY 8/11 766C +$258.00, SPY 8/11 767C +$182.00; total +$440.00), account
@@ -13,11 +25,11 @@ mode: dry_run   # Reverted 2026-08-04 16:10 ET (Phase 6) per the standing end-of
                 # the underlying evidence picture — see the 2026-08-04 conversation log for
                 # the full discussion (tiny sample, trailing stop never tested through an
                 # actual reversal, June out-of-sample loss, reactive-tuning pattern). Original
-                # dry_run rationale (set 2026-07-24 by the owner) still applies going forward:
-                # the 7DTE / multi-day-hold / no-hard-close structure has NO backtest support
-                # as a whole, and the underlying signal lost money out-of-sample (June:
-                # -$5,100). Future live windows require the same explicit, scoped, one-day
-                # approval — not a standing switch.
+                # dry_run rationale (set 2026-07-24 by the owner) still applies as the
+                # default: the 7DTE / multi-day-hold / no-hard-close structure has NO
+                # backtest support as a whole, and the underlying signal lost money
+                # out-of-sample (June: -$5,100). Every live window requires the same
+                # explicit, scoped, one-day approval — not a standing switch.
 
 account_number: "576391551"   # Robinhood "Agentic" cash account (agentic_allowed=true, option_level_2)
 timezone: America/New_York
