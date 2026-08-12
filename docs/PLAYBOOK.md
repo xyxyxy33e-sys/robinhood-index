@@ -11,6 +11,9 @@ Load config from `config/strategy.yaml` first — never hardcode parameters.
 3. Whatever happens, run **Phase 5 (EOD verification)** and **Phase 6 (journal + push)**.
 4. Schedule every intra-day pause with `send_later` (claude-code-remote MCP).
    Never use Bash sleep.
+5. **Fallback wake (added 2026-08-12).** During any 1-minute-cadence stretch, also
+   schedule a longer backup wake every ~5 cycles, and always verify via replay when
+   a wake fires late — see Phase 4 for the full mechanics and rationale.
 
 ## Phase 0 — Bootstrap (9:00)
 
@@ -221,7 +224,36 @@ Load config from `config/strategy.yaml` first — never hardcode parameters.
 Cadence: while ANY position is open, wake **every minute**
 (`send_later` with `delay_minutes: 1` — schedule the next wake first thing on each
 wake so a slow turn never breaks the chain). When flat, keep the same 1-minute
-cadence for signal re-checks (`interval_flat_minutes`). On each wake, for every open position:
+cadence for signal re-checks (`interval_flat_minutes`).
+
+**Fallback wake (added 2026-08-12, operational reliability fix).** Comparing each
+`send_later` trigger's requested vs. actual fire time across 8/10–8/12 showed
+delivery lag correlates with request *density*, not time of day: at 1-minute
+cadence, delivery routinely lagged 5–23 minutes; at ~20-minute cadence (Phase 4
+once flat/monitor-only), delivery was consistently under a minute. Separately, a
+single trigger creation can silently fail to register at all — the suspected root
+cause of the 2026-08-10 incident, where a ~4-hour gap with zero active wakes let a
+real, persistence-gate-confirmed entry signal go completely unactioned (see
+`logs/journal/2026-08-10.md`). Mitigate both failure modes: **every 5th wake
+during any 1-minute-cadence stretch (Phase 3 entry window or Phase 4 with a
+position open), also schedule a second, independent backup wake ~15–20 minutes
+out** (a second `send_later` call in the same turn, same substantive
+instructions) — so one failed or badly delayed 1-minute trigger cannot leave the
+session dark for more than ~20 minutes. If the normal 1-minute wake fires first
+(the common case), the backup fires later and finds nothing new to do — just
+re-verify flatness/no-missed-signal (below) and resume normal cadence; it is a
+redundant safety net, not a second cadence to maintain.
+
+**Whenever ANY wake fires more than ~5 minutes later than scheduled**, do not
+trust the score at the new wall-clock time alone: backfill the full gap and run a
+full per-minute score replay (`strategy_calc.py score` against progressively
+truncated bars, one call per missed minute) to conclusively verify no
+`entry_threshold` crossing — and, if one occurred, no completed 3-minute
+persistence run — happened inside the gap. This is standard practice now (see the
+8/10, 8/11, and 8/12 journals for worked examples) and applies regardless of
+whether the fallback wake above is also active.
+
+On each wake, for every open position:
 1. `get_option_positions` (nonzero) + `get_option_quotes` on held contracts;
    `get_option_orders` to confirm each position's stop is still working.
    Track the position's peak price (highest mid/mark seen since entry, initialized
