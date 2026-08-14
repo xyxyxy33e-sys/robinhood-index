@@ -232,8 +232,23 @@ risk:
                                    # so the first carry decision is principled, not improvised.
 
 monitoring:
-  interval_open_minutes: 1    # wake every minute while any position is open
-  interval_flat_minutes: 1    # signal re-checks every minute when flat, same as when open
+  # Both raised 1 -> 5 on 2026-08-14 (owner decision: "change to 5 minutes first")
+  # after the wake-delivery audit in logs/analysis/2026-08-14_wake_delivery_audit.md.
+  # The 1-minute cadence was never actually achieved: measured delivery on 2026-08-14
+  # was one wake per ~30-50 min, two triggers were stranded permanently (never fired,
+  # still enabled hours past due), and deliveries arrived OUT OF ORDER. Scheduling
+  # more triggers did not buy more wakes — it appears to have made stranding worse,
+  # including stranding the fallback backup wake that was armed to catch exactly this.
+  # Net effect that day: a fully-qualifying 11:21 ET put entry sat inside the entry
+  # window for 9 minutes and went unactioned (logs/journal/2026-08-14.md).
+  # 5 minutes is a FIRST STEP, not the validated answer: it cuts trigger-creation
+  # density 5x while keeping far better resolution than the ~20-min cadence the
+  # 2026-08-12 audit found delivers reliably (sub-1-min lag). If 5 min still shows
+  # stranding or >10 min lag, step down again toward 20. Each wake must now backfill
+  # and REPLAY the whole interval per-minute rather than trusting the endpoint score —
+  # that is what preserves minute-resolution signal detection at a slower poll rate.
+  interval_open_minutes: 5    # wake every 5 min while any position is open
+  interval_flat_minutes: 5    # signal re-checks every 5 min when flat, same as when open
 
 contract:
   # SHADOW LEG (dry-run diagnostic, never traded): for every signal, also record the

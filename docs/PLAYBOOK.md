@@ -11,9 +11,11 @@ Load config from `config/strategy.yaml` first — never hardcode parameters.
 3. Whatever happens, run **Phase 5 (EOD verification)** and **Phase 6 (journal + push)**.
 4. Schedule every intra-day pause with `send_later` (claude-code-remote MCP).
    Never use Bash sleep.
-5. **Fallback wake (added 2026-08-12).** During any 1-minute-cadence stretch, also
-   schedule a longer backup wake every ~5 cycles, and always verify via replay when
-   a wake fires late — see Phase 4 for the full mechanics and rationale.
+5. **Poll every 5 minutes and REPLAY the gap — never trust the endpoint score.**
+   (Revised 2026-08-14, owner decision, replacing the 1-min-cadence + fallback-wake
+   pattern of 2026-08-12.) Wake delivery is unreliable and does not scale with how
+   many triggers you create; minute-resolution comes from replaying backfilled bars
+   on each wake, NOT from waking every minute. See Phase 4.
 
 ## Phase 0 — Bootstrap (9:00)
 
@@ -221,37 +223,48 @@ Load config from `config/strategy.yaml` first — never hardcode parameters.
 
 ## Phase 4 — Monitoring loop (during market hours)
 
-Cadence: while ANY position is open, wake **every minute**
-(`send_later` with `delay_minutes: 1` — schedule the next wake first thing on each
-wake so a slow turn never breaks the chain). When flat, keep the same 1-minute
-cadence for signal re-checks (`interval_flat_minutes`).
+Cadence: wake **every 5 minutes** (`interval_open_minutes` / `interval_flat_minutes`,
+`send_later` with `delay_minutes: 5`), whether a position is open or flat — schedule
+the next wake first thing on each wake so a slow turn never breaks the chain.
+**Schedule exactly ONE wake per turn.** Do not stack backup wakes.
 
-**Fallback wake (added 2026-08-12, operational reliability fix).** Comparing each
-`send_later` trigger's requested vs. actual fire time across 8/10–8/12 showed
-delivery lag correlates with request *density*, not time of day: at 1-minute
-cadence, delivery routinely lagged 5–23 minutes; at ~20-minute cadence (Phase 4
-once flat/monitor-only), delivery was consistently under a minute. Separately, a
-single trigger creation can silently fail to register at all — the suspected root
-cause of the 2026-08-10 incident, where a ~4-hour gap with zero active wakes let a
-real, persistence-gate-confirmed entry signal go completely unactioned (see
-`logs/journal/2026-08-10.md`). Mitigate both failure modes: **every 5th wake
-during any 1-minute-cadence stretch (Phase 3 entry window or Phase 4 with a
-position open), also schedule a second, independent backup wake ~15–20 minutes
-out** (a second `send_later` call in the same turn, same substantive
-instructions) — so one failed or badly delayed 1-minute trigger cannot leave the
-session dark for more than ~20 minutes. If the normal 1-minute wake fires first
-(the common case), the backup fires later and finds nothing new to do — just
-re-verify flatness/no-missed-signal (below) and resume normal cadence; it is a
-redundant safety net, not a second cadence to maintain.
+**Why 5 minutes and not 1 (revised 2026-08-14, owner decision — supersedes the
+2026-08-12 fallback-wake pattern).** The 1-minute cadence was never actually
+achieved. The 2026-08-14 audit (`logs/analysis/2026-08-14_wake_delivery_audit.md`)
+measured requested vs. actual delivery for every trigger that day and found:
+- Real delivery to this session was **one wake per ~30–50 minutes**, no matter how
+  many triggers were queued — scheduling more did not buy more wakes.
+- **Two triggers were stranded permanently** (never fired, still `enabled: true`
+  hours past due), and one of them was the fallback backup wake armed specifically
+  to catch this failure mode. The mitigation stranded alongside what it was
+  protecting.
+- Deliveries arrived **out of order** — a 13:46Z trigger fired at 15:00 while a
+  14:13Z trigger created later never fired at all.
+- Cost that day: a fully-qualifying SPY put entry met the persistence gate at
+  11:21 ET and sat qualifying for 9 minutes inside the entry window, unactioned
+  (`logs/journal/2026-08-14.md`).
+So: **minute-resolution comes from the replay, not from the poll rate.** Polling
+less often but replaying every intervening minute recovers the same signal
+detection, just after the fact, and stops the trigger backlog that caused the
+stranding. 5 min is a first step down from 1; the 2026-08-12 audit found ~20-min
+cadence delivers with sub-1-minute lag, so if 5 min still shows stranding or
+>10 min lag, step down further toward 20 and journal the change.
 
-**Whenever ANY wake fires more than ~5 minutes later than scheduled**, do not
-trust the score at the new wall-clock time alone: backfill the full gap and run a
-full per-minute score replay (`strategy_calc.py score` against progressively
-truncated bars, one call per missed minute) to conclusively verify no
-`entry_threshold` crossing — and, if one occurred, no completed 3-minute
-persistence run — happened inside the gap. This is standard practice now (see the
-8/10, 8/11, and 8/12 journals for worked examples) and applies regardless of
-whether the fallback wake above is also active.
+**On EVERY wake, backfill the full interval since the last check and run a
+per-minute score replay** (`strategy_calc.py score` against progressively truncated
+bars, one call per minute in the gap) — never trust the endpoint score alone. At a
+5-minute cadence this is the normal path, not an exception: a threshold crossing and
+a completed 3-minute persistence run can both begin and end entirely inside one
+interval. Check `strategy_calc.py persistence` whenever any replayed minute crosses
+`entry_threshold`, and compare the resulting entry time against `entry_latest`
+before treating it as actionable. Worked examples: the 8/10, 8/11, 8/12 journals,
+and the 8/14 reconstruction.
+
+**If a wake arrives more than ~15 minutes late, or you notice the chain has gone
+dark**, treat it as a possible stranded trigger: replay the whole gap as above, and
+say so plainly in the journal (time dark, what the replay found, whether anything
+was missed). Do not respond by scheduling extra overlapping wakes — that is what
+made 8/14 worse.
 
 On each wake, for every open position:
 1. `get_option_positions` (nonzero) + `get_option_quotes` on held contracts;
