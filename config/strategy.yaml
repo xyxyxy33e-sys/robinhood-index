@@ -186,17 +186,23 @@ risk:
   # account balance instead of live buying power. This deliberately decouples the
   # strategy from the equity-basket strategy's cash reservations, which had left real
   # buying_power at $60.54 and would otherwise have locked out every entry.
-  paper_buying_power_usd: 11858.54  # snapshot of total account balance, 2026-08-17
-                                   # pre-open. STATIC — it does not drift with
-                                   # hypothetical P&L and is not re-read from the
-                                   # broker. Change it only on owner instruction.
-  # Effective budget in dry_run = min(max_premium_per_trade_usd, paper_buying_power_usd)
-  # -> $1,000, i.e. the cap binds and sizing behaves normally.
+  # Paper equity COMPOUNDS with hypothetical P&L (owner, 2026-08-17: "embed the P&L
+  # on to the paper balance"). The balance is no longer a static number in this file —
+  # it lives in the ledger and is computed, never hand-edited:
+  #     data/paper_ledger.json   starting balance + one row per realized paper trade
+  #     scripts/strategy_calc.py paper   ->  paper_equity_usd, sizing_budget_usd
+  # starting_balance_usd 11858.54 = real account snapshot, 2026-08-17 pre-open.
+  # Effective budget in dry_run = min(max_premium_per_trade_usd, paper_equity_usd),
+  # which `paper` reports directly as sizing_budget_usd. At current equity the $1,000
+  # cap binds, so sizing is unaffected by the other strategies' cash reservations.
+  # Unrealized P&L on an open position is REPORTING ONLY and is never added to the
+  # budget — an unrealized gain is not spendable, and sizing off it would let one
+  # paper position inflate the next one.
   require_live_buying_power_check: true  # REAL, GATING **IN LIVE MODE ONLY**. If mode is
                                    # ever live, no entry may be sized without a fresh
                                    # get_portfolio read in the same wake, and the real
-                                   # contested buying power governs — paper_buying_power_usd
-                                   # is then IGNORED. Cash account: no margin, and
+                                   # contested buying power governs — the paper
+                                   # ledger is then IGNORED. Cash account: no margin, and
                                    # unsettled proceeds are NOT spendable.
   max_concurrent_positions: 1      # single-symbol universe -> at most one open position
   max_total_premium_usd: 1000      # equals the per-position cap now (only one position can be open)

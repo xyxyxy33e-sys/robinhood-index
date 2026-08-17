@@ -28,22 +28,29 @@ it changed.
   Confirmed on 2026-08-17: cash $11,858.54 but **`buying_power` $60.54**, because
   10 queued `agentic` equity market-buy orders reserved $11,798.00 for the open.
   **Resolved 2026-08-17 (owner): this strategy is a TEST RUN on paper capital.**
-  Sizing uses `paper_buying_power_usd` in `config/strategy.yaml` — a fixed $11,858.54
-  snapshot of the balance — NOT live buying power. Rules:
-  1. **dry_run (current):** effective budget = `min(max_premium_per_trade_usd,
-     paper_buying_power_usd)` = **$1,000**. The cap binds, sizing behaves normally, and
-     the other strategies' cash reservations are irrelevant. Do NOT block an entry
-     because real `buying_power` is low — on paper there is nothing to fund.
-  2. `paper_buying_power_usd` is **static**: it does not drift with hypothetical P&L
-     and is never re-read from the broker. Change it only on owner instruction.
-  3. **If mode is ever set to live**, this inverts: read live buying power from
+  Sizing uses **paper equity** from `data/paper_ledger.json` (via
+  `strategy_calc.py paper`) — NOT live buying power. Rules:
+  1. **dry_run (current):** run `strategy_calc.py paper` and size against the
+     `sizing_budget_usd` it reports = `min(max_premium_per_trade_usd, paper_equity_usd)`.
+     At current equity that is **$1,000** (the cap binds). Do NOT block an entry because
+     real `buying_power` is low — on paper there is nothing to fund.
+  2. **Paper equity compounds** (owner, 2026-08-17: "embed the P&L on to the paper
+     balance"). `data/paper_ledger.json` holds the $11,858.54 starting snapshot plus one
+     row per realized paper trade; equity = start + realized. **Append a row the moment
+     a paper position closes**, then re-run `paper`. Never hand-compute equity, never
+     edit or delete a settled row, and never re-apply the 2026-08-04 REAL trades — they
+     are already inside the starting balance.
+  3. **Unrealized P&L never funds sizing.** `paper --mark <mid>` reports it for the
+     journal; `sizing_budget_usd` excludes it by design. If equity ever reaches $0 the
+     `paper` output carries a `HALT` field — stop entering.
+  4. **If mode is ever set to live**, this inverts: read live buying power from
      `get_portfolio` in the same wake, effective budget = `min(cap, live buying_power)`,
-     and `paper_buying_power_usd` is ignored. A budget too small for one contract is
+     and the paper ledger is ignored. A budget too small for one contract is
      then `blocked - insufficient buying power` — journalled like any blocked signal,
      consuming no `max_trades_per_day` slot, and never a reason to shrink the stop,
      skip the stop, or exceed any `risk:` limit. It is a **cash account** (`type: cash`)
      — no margin, and sale proceeds settle before they are spendable.
-  4. Either way: never cancel, modify, or "make room" by touching another strategy's
+  5. Either way: never cancel, modify, or "make room" by touching another strategy's
      orders.
 
 ## Hard invariants (these replaced the old 0DTE "flat by 13:00" rule)

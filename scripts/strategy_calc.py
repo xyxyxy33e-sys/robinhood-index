@@ -126,6 +126,7 @@ DEFAULTS = {
     "take_profit_pct": 30.0,
     "eod_carry_min_unrealized_pct": -14.0,
     "entry_persistence_min": 3.0,
+    "max_premium_per_trade_usd": 1000.0,
     "velocity_watch_pts_per_min": 1.0,
     "acceleration_watch_pts_per_min2": 0.5,
     "option_velocity_watch_usd_per_min": 0.01,
@@ -250,6 +251,57 @@ def cmd_size(args):
         "premium_total": round(qty * per_contract, 2),
         "skip": qty < 1,
     }, indent=2))
+
+
+def cmd_paper(args):
+    """Paper equity = starting balance + realized hypothetical P&L (owner, 2026-08-17:
+    "embed the P&L on to the paper balance"). This is the sizing basis in dry_run; the
+    real account balance is NOT re-read, so the other agentic strategies' cash
+    reservations cannot lock this strategy out of a paper trade.
+
+    Open positions are reported as unrealized marks only when --mark is supplied, and
+    NEVER folded into the sizing budget: an unrealized gain is not spendable, and
+    sizing off it would let a paper position inflate the next position's size.
+    """
+    with open(args.ledger) as f:
+        led = json.load(f)
+    start = float(led["starting_balance_usd"])
+    realized = led.get("realized", [])
+    realized_total = round(sum(float(r["pnl_usd"]) for r in realized), 2)
+    equity = round(start + realized_total, 2)
+
+    out = {
+        "starting_balance_usd": start,
+        "ledger_start_date": led.get("ledger_start_date"),
+        "realized_trades": len(realized),
+        "realized_pnl_usd": realized_total,
+        "paper_equity_usd": equity,
+        "return_since_start_pct": round((equity / start - 1) * 100, 2) if start else None,
+    }
+
+    cfg = load_config(args.config)
+    cap = cfg["max_premium_per_trade_usd"]
+    out["max_premium_per_trade_usd"] = cap
+    out["sizing_budget_usd"] = round(min(cap, equity), 2)
+    out["budget_basis"] = "cap" if cap <= equity else "paper_equity (equity below cap)"
+    if equity <= 0:
+        out["HALT"] = "paper equity is exhausted - no further entries"
+
+    opens = led.get("open_positions", [])
+    if opens:
+        out["open_positions"] = len(opens)
+        out["open_premium_usd"] = round(sum(float(o["premium_usd"]) for o in opens), 2)
+        if args.mark is not None:
+            if len(opens) != 1:
+                sys.exit("--mark needs exactly one open position")
+            o = opens[0]
+            unreal = round((args.mark - float(o["fill"])) * 100 * int(o["qty"]), 2)
+            out["open_mark"] = args.mark
+            out["open_unrealized_usd"] = unreal
+            out["equity_incl_unrealized_usd"] = round(equity + unreal, 2)
+            out["note"] = ("unrealized is REPORTING ONLY - sizing_budget_usd "
+                           "deliberately excludes it")
+    print(json.dumps(out, indent=2))
 
 
 def cmd_decay(args):
@@ -501,6 +553,14 @@ def main():
     s.add_argument("--minutes", type=int, default=None,
                    help="override entry_persistence_min from config (default: config value)")
     s.set_defaults(fn=cmd_persistence)
+
+    s = sub.add_parser("paper")
+    s.add_argument("--ledger", default="data/paper_ledger.json")
+    s.add_argument("--config", default="config/strategy.yaml")
+    s.add_argument("--mark", type=float, default=None,
+                    help="current mid of the single open position - reports unrealized "
+                         "P&L. Reporting only: it is never added to sizing_budget_usd.")
+    s.set_defaults(fn=cmd_paper)
 
     s = sub.add_parser("stops")
     s.add_argument("--fill", type=float, required=True, help="avg fill, per share")

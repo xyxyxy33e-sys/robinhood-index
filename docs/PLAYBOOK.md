@@ -134,13 +134,15 @@ Run **the check-in** every 5 min. On a crossing:
       - *Extremity* — status, `drive` value and `drive_pct`, whether drive is clamped
         (`|drive_pct| >= 0.30`), and `range_pos` (near-low <0.15, near-high >0.85). Tests
         whether entries systematically land at range extremes. n is tiny; diagnostic only.
-   e. **Size against PAPER capital (owner, 2026-08-17 — this is a test run).**
-      `strategy_calc.py size --price <ask> --budget <min(max_premium_per_trade_usd, paper_buying_power_usd)>`
-      → budget **$1,000**, so the cap binds and sizing is unaffected by what the other
-      strategies have reserved. `paper_buying_power_usd` ($11,858.54) is a fixed balance
-      snapshot; do not re-read it from the broker and do not adjust it for hypothetical
-      P&L. **Do not block an entry on low real `buying_power`** — nothing is being
-      funded.
+   e. **Size against PAPER equity (owner, 2026-08-17 — this is a test run).**
+      `strategy_calc.py paper` → take `sizing_budget_usd`
+      (`min(max_premium_per_trade_usd, paper_equity_usd)`), then
+      `strategy_calc.py size --price <ask> --budget <sizing_budget_usd>`.
+      Paper equity **compounds**: `data/paper_ledger.json` = $11,858.54 starting
+      snapshot + one row per realized paper trade. At current equity the $1,000 cap
+      binds, so sizing is unaffected by the other strategies' cash reservations.
+      **Do not block an entry on low real `buying_power`** — nothing is being funded.
+      A `HALT` field in the `paper` output means equity is exhausted; stop entering.
       **If mode is ever live**, this step inverts: `get_portfolio` in the same wake,
       budget = `min(max_premium_per_trade_usd, live buying_power)`, and `size` returning
       0 → log `blocked - insufficient buying power` (no trade slot consumed). Never bend

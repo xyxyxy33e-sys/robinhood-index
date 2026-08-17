@@ -113,3 +113,52 @@ to compound, that is a different design and should be an explicit change.
 
 **Unchanged:** `mode: dry_run`, every `risk:` limit, the entry threshold, the P=3
 persistence gate, the −28% stop, the +30% take-profit, and the EOD carry gate.
+
+---
+
+## Amendment — paper equity now compounds
+
+> "embed the P&L on to the paper balance"
+
+The static snapshot is replaced by a **compounding paper ledger**.
+
+- `data/paper_ledger.json` — `starting_balance_usd` $11,858.54 (2026-08-17 pre-open
+  real-account snapshot), plus one appended row per realized paper trade.
+- `scripts/strategy_calc.py paper` — the only sanctioned way to compute it.
+  Equity = starting balance + realized. Reports `paper_equity_usd` and
+  `sizing_budget_usd` = `min(max_premium_per_trade_usd, paper_equity_usd)`.
+
+Current state: 0 realized rows, equity **$11,858.54**, sizing budget **$1,000** (the
+cap binds), one open position carried in — the 2x SPY 776P 8/21 at $3.56 ($712
+premium) from 2026-08-14, which realizes into the ledger when it closes.
+
+### Three deliberate design choices
+
+**1. Unrealized P&L never funds sizing.** `paper --mark <mid>` reports it for the
+journal, but `sizing_budget_usd` excludes it. An unrealized gain is not spendable, and
+sizing off a mark would let one paper position inflate the next one's size — a
+compounding error that flatters a forward test exactly when it is running hot.
+
+**2. The ledger starts today, not at the strategy's inception.** `starting_balance_usd`
+is a *real* account snapshot taken 2026-08-17. It already contains the two REAL trades
+of 2026-08-04 (+$258.00, +$182.00). The seven earlier *hypothetical* trades
+(2026-07-28 → 2026-08-13, net **-$241.50**) are recorded under
+`pre_ledger_hypotheticals` for the record but **not applied**, because mixing paper
+results into a real-balance snapshot from a later date would double-count one
+accounting and misdate the other. **This is an assumption, and it is reversible**: if
+the owner wants the full paper history embedded, set `starting_balance_usd` to
+11858.54 - 241.50 = **11617.04** and move those rows into `realized`. Flagged rather
+than chosen silently, since it changes the equity curve's origin.
+
+**3. The 2026-08-10 missed-entry reconstruction (~-$278) is excluded** — it was never
+taken and never tracked to a close as an active position. The 2026-08-14 miss IS
+included, because it was reconstructed at a real historical price and has been carried
+forward as an active position ever since.
+
+### Guard rails
+- Append a realized row **at the moment a position closes**; never edit or delete a
+  settled row.
+- Never hand-compute equity — `strategy_calc.py paper` or nothing (CLAUDE.md: all math
+  goes through the calculator).
+- If equity ever reaches $0, `paper` emits a `HALT` field and entries stop.
+- In live mode the ledger is ignored entirely and real buying power governs.
