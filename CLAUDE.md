@@ -27,19 +27,24 @@ it changed.
   another agent may have reserved most or all of it before the entry window opens.
   Confirmed on 2026-08-17: cash $11,858.54 but **`buying_power` $60.54**, because
   10 queued `agentic` equity market-buy orders reserved $11,798.00 for the open.
-  Consequences, all mandatory:
-  1. `max_premium_per_trade_usd` ($1,000) is a **CAP, not an entitlement.** Effective
-     budget = `min(max_premium_per_trade_usd, live buying_power)`.
-  2. **Always read live buying power from `get_portfolio` immediately before sizing**
-     — never size off the config cap, the cash balance, or a figure read earlier in
-     the session. It can change between wakes as another agent's orders fill.
-  3. If the effective budget cannot buy even one contract, that is a
-     `blocked - insufficient buying power` entry, journalled like any other blocked
-     signal. It does NOT consume a `max_trades_per_day` slot, and it is NOT a reason
-     to shrink the stop, skip the stop, or exceed any `risk:` limit.
-  4. This is a **cash account** (`type: cash`) — no margin, and sale proceeds settle
-     before they are spendable. Never assume unsettled proceeds are available.
-  5. Never cancel, modify, or "make room" by touching another strategy's orders.
+  **Resolved 2026-08-17 (owner): this strategy is a TEST RUN on paper capital.**
+  Sizing uses `paper_buying_power_usd` in `config/strategy.yaml` — a fixed $11,858.54
+  snapshot of the balance — NOT live buying power. Rules:
+  1. **dry_run (current):** effective budget = `min(max_premium_per_trade_usd,
+     paper_buying_power_usd)` = **$1,000**. The cap binds, sizing behaves normally, and
+     the other strategies' cash reservations are irrelevant. Do NOT block an entry
+     because real `buying_power` is low — on paper there is nothing to fund.
+  2. `paper_buying_power_usd` is **static**: it does not drift with hypothetical P&L
+     and is never re-read from the broker. Change it only on owner instruction.
+  3. **If mode is ever set to live**, this inverts: read live buying power from
+     `get_portfolio` in the same wake, effective budget = `min(cap, live buying_power)`,
+     and `paper_buying_power_usd` is ignored. A budget too small for one contract is
+     then `blocked - insufficient buying power` — journalled like any blocked signal,
+     consuming no `max_trades_per_day` slot, and never a reason to shrink the stop,
+     skip the stop, or exceed any `risk:` limit. It is a **cash account** (`type: cash`)
+     — no margin, and sale proceeds settle before they are spendable.
+  4. Either way: never cancel, modify, or "make room" by touching another strategy's
+     orders.
 
 ## Hard invariants (these replaced the old 0DTE "flat by 13:00" rule)
 1. **Every open position must carry a WORKING GTC stop-market order at all times.**

@@ -83,3 +83,33 @@ will be locked out on any day that happens. If it is meant to keep trading, it n
 reserved allocation (e.g. the equity strategy capped below the full balance, or a
 carve-out this strategy can rely on). Flagging rather than assuming: choosing how to
 split the capital is the owner's call, not this strategy's.
+
+---
+
+## Resolution — same day, owner decision
+
+> "this strategy will only do test run, not with real money, just copy the account
+> balance now and continue with this number"
+
+The open question above is answered: this strategy does not compete for the cash at
+all. It sizes against a **fixed paper balance**, `paper_buying_power_usd: 11858.54`
+(the 2026-08-17 pre-open snapshot), and ignores live buying power entirely while in
+`dry_run`.
+
+Effective budget = `min($1,000 cap, $11,858.54)` = **$1,000** — the cap binds, so
+sizing behaves exactly as it did before the equity strategy existed. The $60.54
+lockout is moot: nothing is being funded, so there is nothing to be short of.
+
+The gate added earlier today is therefore **narrowed, not removed**. It now applies in
+live mode only, where real contested buying power would govern and
+`paper_buying_power_usd` is ignored. That keeps the protection in place for the case
+where it matters, without letting another strategy's cash reservations block a paper
+trade.
+
+`paper_buying_power_usd` is deliberately **static** — it does not drift with
+hypothetical P&L. That keeps every session's sizing comparable to every other
+session's, which is what a forward test needs. If the owner later wants paper equity
+to compound, that is a different design and should be an explicit change.
+
+**Unchanged:** `mode: dry_run`, every `risk:` limit, the entry threshold, the P=3
+persistence gate, the −28% stop, the +30% take-profit, and the EOD carry gate.
