@@ -134,7 +134,16 @@ Run **the check-in** every 5 min. On a crossing:
       - *Extremity* — status, `drive` value and `drive_pct`, whether drive is clamped
         (`|drive_pct| >= 0.30`), and `range_pos` (near-low <0.15, near-high >0.85). Tests
         whether entries systematically land at range extremes. n is tiny; diagnostic only.
-   e. Size: `strategy_calc.py size --price <ask> --budget <config>`. Premium ≤ settled cash.
+   e. **Buying-power gate, then size (REAL, gating — added 2026-08-17).**
+      `get_portfolio` **in this same wake** → read `buying_power.buying_power`. Buying
+      power is shared with other agentic strategies and can be reserved by their queued
+      orders, so it must be read fresh, never carried over or assumed from the cash
+      balance. Then
+      `strategy_calc.py size --price <ask> --budget <min(max_premium_per_trade_usd, buying_power)>`.
+      `size` returning 0 contracts → log `blocked - insufficient buying power` (does not
+      consume a trade slot) and resume re-checks. Never bend sizing, the stop, or any
+      `risk:` limit to fit a shrunken budget, and never free up cash by touching another
+      strategy's orders. Cash account: no margin, unsettled proceeds are not spendable.
    f. **Shadow 0DTE leg (record, never trade).** Same underlying/direction/strike at
       today's expiry (nearest strike if absent). Record ask, mid, IV, greeks, and the
       contracts a full budget would buy. This is the forward answer to 7DTE-vs-0DTE.

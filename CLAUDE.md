@@ -21,6 +21,25 @@ it changed.
   the account owner and journal it as an out-of-scope observation, but do not act
   on it — this strategy has no authorization over other strategies' orders. See
   `logs/journal/2026-08-06.md` for the full incident writeup and how it resolved.
+- **Buying power is SHARED and CONTESTED (owner, 2026-08-17).** A further strategy
+  was added that deploys the account's cash balance into an equity basket. The
+  account balance is therefore only *potential* buying power for this strategy —
+  another agent may have reserved most or all of it before the entry window opens.
+  Confirmed on 2026-08-17: cash $11,858.54 but **`buying_power` $60.54**, because
+  10 queued `agentic` equity market-buy orders reserved $11,798.00 for the open.
+  Consequences, all mandatory:
+  1. `max_premium_per_trade_usd` ($1,000) is a **CAP, not an entitlement.** Effective
+     budget = `min(max_premium_per_trade_usd, live buying_power)`.
+  2. **Always read live buying power from `get_portfolio` immediately before sizing**
+     — never size off the config cap, the cash balance, or a figure read earlier in
+     the session. It can change between wakes as another agent's orders fill.
+  3. If the effective budget cannot buy even one contract, that is a
+     `blocked - insufficient buying power` entry, journalled like any other blocked
+     signal. It does NOT consume a `max_trades_per_day` slot, and it is NOT a reason
+     to shrink the stop, skip the stop, or exceed any `risk:` limit.
+  4. This is a **cash account** (`type: cash`) — no margin, and sale proceeds settle
+     before they are spendable. Never assume unsettled proceeds are available.
+  5. Never cancel, modify, or "make room" by touching another strategy's orders.
 
 ## Hard invariants (these replaced the old 0DTE "flat by 13:00" rule)
 1. **Every open position must carry a WORKING GTC stop-market order at all times.**

@@ -167,7 +167,23 @@ signal:
                              # is a natural next step if this proves useful — not built yet.
 
 risk:
-  max_premium_per_trade_usd: 1000  # max premium outlay on one position
+  max_premium_per_trade_usd: 1000  # max premium outlay on one position. *** THIS IS A
+                                   # CAP, NOT AN ENTITLEMENT *** Buying power on this
+                                   # account is shared with other agentic strategies
+                                   # (owner, 2026-08-17: an equity-basket strategy now
+                                   # deploys the cash balance). Effective budget =
+                                   # min(this cap, live get_portfolio buying_power),
+                                   # read fresh immediately before sizing every entry.
+                                   # 2026-08-17 reference: cash $11,858.54 but buying
+                                   # power $60.54 — $11,798 reserved by 10 queued
+                                   # agentic equity buys. At that level this strategy
+                                   # cannot fund any entry; that is a
+                                   # `blocked - insufficient buying power` signal, not
+                                   # a reason to bend sizing or stop rules.
+  require_live_buying_power_check: true  # REAL, GATING (2026-08-17). No entry may be
+                                   # sized without a fresh get_portfolio read in the
+                                   # same wake. Cash account: no margin, and unsettled
+                                   # proceeds are NOT spendable.
   max_concurrent_positions: 1      # single-symbol universe -> at most one open position
   max_total_premium_usd: 1000      # equals the per-position cap now (only one position can be open)
   max_trades_per_day: 6
