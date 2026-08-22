@@ -132,14 +132,14 @@ diagnostic-only — but this is worth stating plainly as an accumulating result,
 a repeated caveat: **the case for promoting decay to a gating rule has gotten weaker, not
 stronger, since 8/07.**
 
-## Open questions for the owner (not acted on unilaterally)
+## Decisions (owner, 2026-08-22)
 
-1. **EOD carry gate diagnostic** — add a Phase 5 log line that pairs carry-decision
-   cushion with the next morning's actual gap, so "how often does the gate's cushion
-   survive the actual gap" can be read off the journal directly instead of
-   reconstructed by hand. This is a logging change, not a parameter change, but it's
-   still new surface area worth a nod before adding.
-2. **`entry_latest` stays at 11:30 ET** — Finding 3 above reverses the drift of the last
-   two "Open for the owner" write-ups. Flagging explicitly in case there's context (e.g.
-   a reason to widen the window that isn't visible from the journal record alone) that
-   should override this reading.
+1. **EOD carry gate diagnostic — approved and added.** `docs/PLAYBOOK.md` Phase 5 step 1c
+   now journals the carry cushion in dollars every time a position carries; Phase 0 step 5
+   now reconciles it against the actual overnight move the next morning and journals
+   either "cushion held" or an explicit **cushion breach** (even if the stop itself wasn't
+   touched). No change to `eod_carry_min_unrealized_pct` (-14%) — still too little data
+   (n=2) to tune the number itself; this only makes the next several carries
+   self-documenting instead of requiring hand-reconstruction across two files.
+2. **`entry_latest` stays at 11:30 ET — confirmed.** `config/strategy.yaml` updated with
+   the 2026-08-22 reconfirmation and pointer to this doc.

@@ -88,6 +88,15 @@ mode: dry_run|live
 5. `get_option_positions` (nonzero) → **carried-over positions are expected.** For each:
    confirm a WORKING GTC stop (`get_option_orders`, state queued/confirmed); re-place if
    missing. Record entry date + expiration so Phase 4 can apply the time stop / DTE floor.
+   **Carry-cushion reconciliation (added 2026-08-22):** if yesterday's Phase 5 journaled a
+   carry-cushion dollar figure (previous step's diagnostic), compare it to today's actual
+   overnight move: `gap_dollars = (today's first regular-session mid) − (yesterday's Phase
+   5 mid)`, signed against the stop direction (a move toward the stop is negative). If
+   `|gap_dollars| > cushion`, journal it explicitly as a **cushion breach** (whether or not
+   the stop itself was touched — a breach that didn't reach the stop is still evidence the
+   gate underpriced the move). If `|gap_dollars| ≤ cushion`, journal that the cushion held.
+   This is what turns "did the gate work" from a hand-reconstruction across two journal
+   files into a single line read off Phase 0 every morning a position was carried.
 6. Create `logs/journal/YYYY-MM-DD.md` from the template below.
 
 ## Phase 1 — Pre-open (9:00 → 9:29)
@@ -220,6 +229,10 @@ ones too weak to.
       2 min, flat before 16:00): too little cushion against an overnight gap through the
       trigger. Above → carry with the GTC stop. Journal the decision either way, every day
       a position is open at 15:45. In dry_run, journal the hypothetical close.
+      **Carry-cushion diagnostic (added 2026-08-22, see
+      `logs/analysis/2026-08-22_weekly_review.md`):** when carrying, journal the cushion
+      in dollars (`mid − eod_carry_floor`) explicitly next to the decision. This is what
+      Phase 0 the next morning reconciles against — see Phase 0 step 5.
 2. Time stop / DTE floor: anything breaching before the next session closes now, not
    next morning.
 3. Journal: open positions, stop order ids, DTE remaining, days held.
@@ -274,6 +287,15 @@ flat by: · realized P&L: $X · trades: N/6 · deviations:
 Full rationale is in git history and `logs/analysis/`; kept short here so the runbook
 stays readable.
 
+- **2026-08-22 — carry-cushion diagnostic added** (Phase 5 step 1c + Phase 0 step 5,
+  owner-approved): journal the carry cushion in dollars when carrying, reconcile it
+  against the actual overnight move the next Phase 0. Motivated by 8/19's journal
+  claiming the carry gate had "failed 2 of 2" when re-reading the underlying events
+  (`logs/analysis/2026-08-22_weekly_review.md`) found only one clean miss (8/19) and one
+  case where the cushion was eaten but the stop was never threatened (8/17) — the
+  comparison had to be hand-reconstructed across two files, which is how the
+  overstatement happened. `eod_carry_min_unrealized_pct` (-14%) unchanged — n=2 is still
+  too thin to tune against.
 - **2026-08-22 — pre-emptive cadence tightening added** (check-in step 6): tighten to
   3 min once `|score|` is within 15 pts of `entry_threshold`, not only after a crossing.
   A weekly review (`logs/analysis/2026-08-22_weekly_review.md`) found 4 wake-latency

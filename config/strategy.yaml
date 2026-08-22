@@ -48,7 +48,12 @@ schedule:            # all times US/Eastern
   entry_earliest: "09:45"   # owner's choice. Backtest 07/13-07/24 across 9:35/9:45/9:50/10:00
                             # was inconclusive (spread was noise); 9:35 is the one ruled OUT
                             # structurally — one bar makes drive/range_pos pure noise.
-  entry_latest: "11:30"     # no new entries after this
+  entry_latest: "11:30"     # no new entries after this. Reconfirmed 2026-08-22 (owner) after
+                            # a weekly review raised then re-examined widening it: neither
+                            # cited instance (8/17, 8/18) would actually have produced a
+                            # trade under a wider window (slot was full / miss was wake
+                            # latency an hour before the cutoff, not a cutoff problem) — see
+                            # logs/analysis/2026-08-22_weekly_review.md. Staying at 11:30.
   # HARD CLOSE REMOVED (owner decision). Positions are no longer flattened intraday;
   # they are held across sessions and exited by stop / target / time-stop (see risk:).
   eod_verify: "15:45"       # before the close: confirm every open position has a
