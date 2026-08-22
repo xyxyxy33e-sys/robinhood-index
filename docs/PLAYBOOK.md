@@ -49,6 +49,17 @@ Every wake runs these six steps. `scripts/checkin.py` does the mechanical parts.
    even when it does not trigger — the post-trigger path is the dataset.
 6. **Journal, commit, push, schedule ONE next wake.** Decay rows every wake; a general
    status line only when something changed or every ~10th wake.
+   **Pre-emptive cadence tightening (added 2026-08-22, see
+   `logs/analysis/2026-08-22_weekly_review.md`):** during Phase 3, if `|score|` is within
+   15 points of `entry_threshold` (i.e. `|score| >= entry_threshold - 15`) on the latest
+   bar, schedule the next wake at 3 min regardless of whether anything has crossed yet.
+   A complete P=3 run takes only 3 minutes to open and close — tightening only *after* a
+   crossing is observed is structurally too late, since the run can finish before that
+   tightened wake ever fires. This was the difference between 8/21 (tightened
+   pre-emptively at +30.6, no miss) and four prior misses (8/14, 8/18, 8/19, 8/20) where
+   a full qualifying run opened and closed inside a single wake gap that started from a
+   score not yet flagged as "close." Revert to normal cadence once the score pulls back
+   outside the 15-point band with no live run.
 
 **Wake prompt template** — keep it short; the journal is the source of truth, the
 prompt is a pointer. Prompts go stale within minutes and have twice carried claims
@@ -263,6 +274,12 @@ flat by: · realized P&L: $X · trades: N/6 · deviations:
 Full rationale is in git history and `logs/analysis/`; kept short here so the runbook
 stays readable.
 
+- **2026-08-22 — pre-emptive cadence tightening added** (check-in step 6): tighten to
+  3 min once `|score|` is within 15 pts of `entry_threshold`, not only after a crossing.
+  A weekly review (`logs/analysis/2026-08-22_weekly_review.md`) found 4 wake-latency
+  misses in the forward record (8/14, 8/18, 8/19, 8/20) where a full P=3 run opened and
+  closed inside one wake gap that started from a score not yet flagged as "close" —
+  reactive tightening was structurally too late in all four.
 - **2026-08-14 — monitoring cadence 1 min → 5 min; fallback-wake pattern removed.**
   Measured wake delivery: at 1-min cadence the tail reached 181 min; at 5-min it is ~13
   min. Scheduling more triggers did not buy more wakes, and stacked backup wakes were
