@@ -105,6 +105,23 @@ rvol --closes C1,C2,C3,...
     delivering. Recorded at every signal so the hypothesis can be tested on live
     forward data — historical IV is not available through the Robinhood tools.
 
+reentry-distance --first-entry-price P --reentry-price P --direction call|put [--minutes-elapsed N]
+    DIAGNOSTIC ONLY (added 2026-08-28) — never gates the re-entry decision, see
+    docs/STRATEGY.md "Re-entry distance diagnostic". Run this at every same-day
+    re-entry (an entry into a symbol that already had a position opened AND
+    closed earlier the same day). Reports how far the underlying has already
+    moved, in the position's favor, since the day's FIRST entry in that symbol
+    — the day's first entry itself has no "distance" to report, so this command
+    only ever applies to the second+ entry of a day. `extended_pct` is signed:
+    positive means the underlying has moved further in the trade's favorable
+    direction since the original fill (the re-entry may be chasing an already-
+    extended move); negative means it has given back some of that move. Motivated
+    by the 2026-08-28 forward loss (SPY 775C re-entry, -28.04%) but NOT backed by
+    enough same-day-re-entry evidence to gate on (5W-3L combined across every
+    instance in this repo's backtests + forward record as of 2026-08-28, net
+    positive — see docs/STRATEGY.md). Log it every re-entry; revisit only once
+    more instances accumulate under the current persistence-gate methodology.
+
 Stdlib only. Output is JSON on stdout.
 """
 
@@ -323,6 +340,28 @@ def cmd_decay(args):
     }, indent=2))
 
 
+def cmd_reentry_distance(args):
+    first, now, direction = args.first_price, args.reentry_price, args.direction
+    pct_move = (now - first) / first * 100 if first else None
+    if pct_move is None:
+        extended_pct = None
+    elif direction == "call":
+        extended_pct = pct_move
+    else:  # put: underlying falling further is what "extends" the move
+        extended_pct = -pct_move
+    print(json.dumps({
+        "first_entry_price": first,
+        "reentry_price": now,
+        "direction": direction,
+        "pct_move_since_first_entry": round(pct_move, 3) if pct_move is not None else None,
+        "extended_pct": round(extended_pct, 3) if extended_pct is not None else None,
+        "minutes_since_first_entry": args.minutes_elapsed,
+        "note": ("DIAGNOSTIC ONLY (added 2026-08-28) - never gates the re-entry decision. "
+                 "See docs/STRATEGY.md 'Re-entry distance diagnostic' - journal it, do not "
+                 "act on it."),
+    }, indent=2))
+
+
 def cmd_velocity(args):
     cfg = load_config(args.config)
     # Generic delta/dt tool: --score-now/--score-prev is any numeric series (sentiment
@@ -521,6 +560,16 @@ def main():
     s.add_argument("--current-score", type=float, required=True, dest="current_score")
     s.add_argument("--floor", type=float, default=20.0)
     s.set_defaults(fn=cmd_decay)
+
+    s = sub.add_parser("reentry-distance")
+    s.add_argument("--first-entry-price", type=float, required=True, dest="first_price",
+                   help="underlying price at the day's FIRST entry in this symbol")
+    s.add_argument("--reentry-price", type=float, required=True, dest="reentry_price",
+                   help="underlying price now, at the re-entry")
+    s.add_argument("--direction", choices=["call", "put"], required=True)
+    s.add_argument("--minutes-elapsed", type=float, default=None, dest="minutes_elapsed",
+                   help="minutes since the day's first entry (optional, for the journal)")
+    s.set_defaults(fn=cmd_reentry_distance)
 
     s = sub.add_parser("velocity")
     s.add_argument("--score-now", type=float, required=True, dest="score_now")

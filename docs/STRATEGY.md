@@ -220,6 +220,33 @@ the time gate still holds, the symbol re-qualifies, concurrency/premium caps per
 and the trade is funded from still-settled cash (never same-day sale proceeds —
 good-faith-violation rule).
 
+**Re-entry distance diagnostic (record, never gate — added 2026-08-28).** The
+first same-day re-entry under the current (persistence-gate) methodology
+happened 2026-08-28: Trade #1 (SPY 773C) hit TP at 11:00 ET while the P=3 run
+that triggered it was still active, so Trade #2 (SPY 775C) re-entered the same
+signal 11 minutes later — and lost. That single loss raised an obvious
+hypothesis: re-entering into an already-extended move chases the tail of the
+run rather than catching a fresh one, and should be blocked past some distance
+from the original fill. Checked against every same-day re-entry instance that
+exists anywhere in this repo before deciding: `logs/backtest/2026-07-13_to_2026-07-24.md`
+(0DTE, different config) has 6 tagged re-entries, 4W–2L, net +$792 — actually a
+*higher* win rate than that backtest's 44% full-sample average, and its own
+write-up credits re-entries for compounding gains on trend days. The June 7DTE
+backtest (`take_profit_30pct_test.md`, pre-persistence-gate methodology) has
+exactly one same-day pair (06-29): a stop followed by a re-entry that won
+(+43.5%). Combined across all three sources: 5W–3L, net positive — the
+opposite of what the hypothesis predicted. **Conclusion: do not gate on this
+n=1.** Instead, log it going forward: at every same-day re-entry, run
+`strategy_calc.py reentry-distance --first-entry-price <underlying price at
+the day's first entry> --reentry-price <underlying price now> --direction
+call|put` and record `extended_pct` (positive = underlying has moved further
+in the position's favor since the original fill; negative = given back) plus
+minutes since the first entry, in the journal's "Re-entry distance tracking"
+table. Revisit only once several more same-day re-entries accumulate under
+the current 7DTE + persistence-gate config specifically — none of the
+existing evidence above is a clean methodology match (0DTE differs
+structurally in decay/DTE; June predates the persistence gate).
+
 ## Sizing & account constraints
 
 - Account: Robinhood cash account (no margin, no PDT restrictions, but T+1 settlement

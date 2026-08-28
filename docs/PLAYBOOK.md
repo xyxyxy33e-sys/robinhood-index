@@ -171,6 +171,16 @@ Run **the check-in** every 5 min. On a crossing:
    f. **Shadow 0DTE leg (record, never trade).** Same underlying/direction/strike at
       today's expiry (nearest strike if absent). Record ask, mid, IV, greeks, and the
       contracts a full budget would buy. This is the forward answer to 7DTE-vs-0DTE.
+   g. **Re-entry distance (record, never gate — only if this is a same-day re-entry,**
+      i.e. a symbol that already had a position opened AND closed earlier today).
+      `strategy_calc.py reentry-distance --first-entry-price <underlying price at the
+      day's first entry> --reentry-price <underlying price now> --direction call|put
+      [--minutes-elapsed N]` → log `extended_pct` and minutes-since-first-entry in the
+      "Re-entry distance tracking" table. See docs/STRATEGY.md "Re-entry distance
+      diagnostic" — added 2026-08-28 after the day's first same-day re-entry lost;
+      existing backtest + forward evidence is net positive on re-entries overall
+      (5W-3L across every instance in this repo), so this is diagnostic only, not a
+      gate, until more same-day-re-entry instances accumulate.
 3. **Place (live only).** `review_option_order` (limit buy at mid rounded up one tick,
    gfd) → any blocking alert aborts the trade. Then `place_option_order` with a fresh
    `ref_id`.
@@ -267,6 +277,8 @@ VIX: X · rv5: X% · rv10: X% · rv20: X%
 | time | contract/direction | status | score | drive | drive_pct | clamped? | range_pos | extremity |
 ## Persistence gate log (REAL gate)
 | time | score | trailing run (min) | gate met? | action |
+## Re-entry distance tracking (diagnostic — every same-day re-entry)
+| time | symbol/direction | first entry price | reentry price | extended_pct | minutes since first entry | outcome |
 ## Shadow 0DTE leg (diagnostic — never traded)
 | time | 7DTE contract | 0DTE contract | 7DTE mid | 0DTE mid | 0DTE qty @ budget | stop/TP hit? | terminal (13:30) |
 ## Signal-decay tracking (diagnostic — every wake while open)
@@ -287,6 +299,16 @@ flat by: · realized P&L: $X · trades: N/6 · deviations:
 Full rationale is in git history and `logs/analysis/`; kept short here so the runbook
 stays readable.
 
+- **2026-08-28 — re-entry distance diagnostic added** (Phase 3 step 2g, journal
+  template): log `strategy_calc.py reentry-distance` (`extended_pct`, minutes since
+  the day's first entry) at every same-day re-entry. Motivated by the day's first
+  same-day re-entry under the current persistence-gate methodology losing (-28.04%),
+  which raised the hypothesis that re-entering an already-extended move chases the
+  tail of the run. Checked against every same-day re-entry instance in this repo's
+  backtests + forward record before deciding: 5W-3L, net positive — the opposite of
+  the hypothesis. **Not adopted as a gate** (n=1 on the current methodology
+  specifically) — diagnostic only, revisit once more instances accumulate. See
+  `docs/STRATEGY.md` "Re-entry distance diagnostic".
 - **2026-08-22 — carry-cushion diagnostic added** (Phase 5 step 1c + Phase 0 step 5,
   owner-approved): journal the carry cushion in dollars when carrying, reconcile it
   against the actual overnight move the next Phase 0. Motivated by 8/19's journal
