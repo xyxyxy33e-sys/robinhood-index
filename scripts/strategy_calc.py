@@ -122,12 +122,32 @@ reentry-distance --first-entry-price P --reentry-price P --direction call|put [-
     positive — see docs/STRATEGY.md). Log it every re-entry; revisit only once
     more instances accumulate under the current persistence-gate methodology.
 
+ledger open  --contract C --instrument-id ID --qty N --fill F [--date D] [--note ...]
+ledger close (--instrument-id ID | --contract C) --exit X --reason R [--qualifier Q] [--date-closed D] [--note ...]
+    The ONLY supported way to write data/paper_ledger.json (added 2026-09-02).
+    Three of the last four sessions drifted the ledger by hand-editing it —
+    `open_positions` left empty at entry (8/31, 9/1) and a required field dropped
+    in a later edit pass (9/2) — so the manual step is gone. `open` appends an
+    `open_positions` row (premium_usd computed, never typed) and refuses when the
+    slot is already taken (`max_concurrent_positions`) or the premium exceeds
+    `max_premium_per_trade_usd`. `close` moves that row to `realized`, computing
+    pnl_usd / return_pct from the recorded fill, and clears the slot. Both are
+    append-only on settled rows (a realized row is never edited or deleted, per
+    CLAUDE.md), write atomically, and print the updated `paper` summary so the
+    journal figure comes from the same run. Reasons are the real exits only:
+    take_profit, stop, eod_carry_gate, time_stop, dte_floor, daily_halt, manual;
+    use --qualifier for the established annotations ("GAPPED THROUGH",
+    "RETROACTIVE - wake gap"). Modeled prices go in exactly as the journal
+    convention dictates (trigger price for an intraday cross, first print for a
+    gap) — this command records, it does not decide.
+
 Stdlib only. Output is JSON on stdout.
 """
 
 import argparse
 import json
 import math
+import os
 import re
 import sys
 from datetime import datetime, time
@@ -137,6 +157,7 @@ ET = ZoneInfo("America/New_York")
 
 DEFAULTS = {
     "entry_threshold": 40.0,
+    "max_concurrent_positions": 1.0,
     "gap_limit_pct": 1.5,
     "vix_max": 30.0,
     "stop_trigger_frac": 0.72,
@@ -270,18 +291,16 @@ def cmd_size(args):
     }, indent=2))
 
 
-def cmd_paper(args):
+def paper_summary(led, cfg, mark=None):
     """Paper equity = starting balance + realized hypothetical P&L (owner, 2026-08-17:
     "embed the P&L on to the paper balance"). This is the sizing basis in dry_run; the
     real account balance is NOT re-read, so the other agentic strategies' cash
     reservations cannot lock this strategy out of a paper trade.
 
-    Open positions are reported as unrealized marks only when --mark is supplied, and
+    Open positions are reported as unrealized marks only when `mark` is supplied, and
     NEVER folded into the sizing budget: an unrealized gain is not spendable, and
     sizing off it would let a paper position inflate the next position's size.
     """
-    with open(args.ledger) as f:
-        led = json.load(f)
     start = float(led["starting_balance_usd"])
     realized = led.get("realized", [])
     realized_total = round(sum(float(r["pnl_usd"]) for r in realized), 2)
@@ -296,7 +315,6 @@ def cmd_paper(args):
         "return_since_start_pct": round((equity / start - 1) * 100, 2) if start else None,
     }
 
-    cfg = load_config(args.config)
     cap = cfg["max_premium_per_trade_usd"]
     out["max_premium_per_trade_usd"] = cap
     out["sizing_budget_usd"] = round(min(cap, equity), 2)
@@ -308,17 +326,120 @@ def cmd_paper(args):
     if opens:
         out["open_positions"] = len(opens)
         out["open_premium_usd"] = round(sum(float(o["premium_usd"]) for o in opens), 2)
-        if args.mark is not None:
+        if mark is not None:
             if len(opens) != 1:
                 sys.exit("--mark needs exactly one open position")
             o = opens[0]
-            unreal = round((args.mark - float(o["fill"])) * 100 * int(o["qty"]), 2)
-            out["open_mark"] = args.mark
+            unreal = round((mark - float(o["fill"])) * 100 * int(o["qty"]), 2)
+            out["open_mark"] = mark
             out["open_unrealized_usd"] = unreal
             out["equity_incl_unrealized_usd"] = round(equity + unreal, 2)
             out["note"] = ("unrealized is REPORTING ONLY - sizing_budget_usd "
                            "deliberately excludes it")
-    print(json.dumps(out, indent=2))
+    return out
+
+
+def cmd_paper(args):
+    with open(args.ledger) as f:
+        led = json.load(f)
+    print(json.dumps(paper_summary(led, load_config(args.config), args.mark), indent=2))
+
+
+LEDGER_CLOSE_REASONS = ["take_profit", "stop", "eod_carry_gate", "time_stop",
+                        "dte_floor", "daily_halt", "manual"]
+
+
+def _load_ledger(path):
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except FileNotFoundError:
+        sys.exit(f"no ledger at {path} — see CLAUDE.md (paper ledger) before creating one")
+    except json.JSONDecodeError as e:
+        sys.exit(f"ledger {path} is not valid JSON ({e}); fix it before writing")
+
+
+def _write_ledger(path, led):
+    """Write via temp file + rename so a crash mid-write can never leave a truncated
+    ledger behind (the 2026-09-01 malformed-fragment incident was a hand edit; this
+    closes the equivalent failure mode for the tool)."""
+    tmp = f"{path}.tmp"
+    with open(tmp, "w") as f:
+        json.dump(led, f, indent=2)
+        f.write("\n")
+    os.replace(tmp, path)
+
+
+def _today_et():
+    return datetime.now(ET).date().isoformat()
+
+
+def cmd_ledger_open(args):
+    led = _load_ledger(args.ledger)
+    cfg = load_config(args.config)
+    opens = led.setdefault("open_positions", [])
+    if args.qty < 1:
+        sys.exit("refusing: --qty must be >= 1")
+    if args.fill <= 0:
+        sys.exit("refusing: --fill must be > 0")
+    if any(o.get("instrument_id") == args.instrument_id for o in opens):
+        sys.exit(f"refusing: instrument {args.instrument_id} is already in open_positions")
+    max_open = int(cfg["max_concurrent_positions"])
+    if len(opens) >= max_open:
+        sys.exit(f"refusing: {len(opens)} position(s) already open and "
+                 f"max_concurrent_positions is {max_open} — close first")
+    premium = round(args.fill * 100 * args.qty, 2)
+    cap = cfg["max_premium_per_trade_usd"]
+    if premium > cap + 1e-9:
+        sys.exit(f"refusing: premium {premium:.2f} exceeds max_premium_per_trade_usd {cap:.2f}")
+    row = {
+        "date_opened": args.date or _today_et(),
+        "contract": args.contract,
+        "instrument_id": args.instrument_id,
+        "qty": args.qty,
+        "fill": args.fill,
+        "premium_usd": premium,
+        "note": args.note or "",
+    }
+    opens.append(row)
+    _write_ledger(args.ledger, led)
+    print(json.dumps({"opened": row, "paper": paper_summary(led, cfg)}, indent=2))
+
+
+def cmd_ledger_close(args):
+    led = _load_ledger(args.ledger)
+    cfg = load_config(args.config)
+    opens = led.get("open_positions", [])
+    if args.instrument_id:
+        matches = [o for o in opens if o.get("instrument_id") == args.instrument_id]
+    else:
+        matches = [o for o in opens if o.get("contract") == args.contract]
+    if len(matches) != 1:
+        sys.exit(f"refusing: expected exactly one matching open position, found {len(matches)} "
+                 f"(open: {[o.get('contract') for o in opens]})")
+    if args.exit <= 0:
+        sys.exit("refusing: --exit must be > 0")
+    o = matches[0]
+    fill, qty = float(o["fill"]), int(o["qty"])
+    reason = args.reason + (f" ({args.qualifier})" if args.qualifier else "")
+    row = {
+        "date_opened": o["date_opened"],
+        "date_closed": args.date_closed or _today_et(),
+        "contract": o["contract"],
+        "instrument_id": o.get("instrument_id"),
+        "qty": qty,
+        "fill": fill,
+        "exit": args.exit,
+        "pnl_usd": round((args.exit - fill) * 100 * qty, 2),
+        "return_pct": round((args.exit / fill - 1) * 100, 2),
+        "reason": reason,
+        "note": args.note if args.note is not None else o.get("note", ""),
+    }
+    # Append-only: settled rows are never edited or deleted (CLAUDE.md paper rule 2).
+    led.setdefault("realized", []).append(row)
+    led["open_positions"] = [p for p in opens if p is not o]
+    _write_ledger(args.ledger, led)
+    print(json.dumps({"closed": row, "paper": paper_summary(led, cfg)}, indent=2))
 
 
 def cmd_decay(args):
@@ -610,6 +731,36 @@ def main():
                     help="current mid of the single open position - reports unrealized "
                          "P&L. Reporting only: it is never added to sizing_budget_usd.")
     s.set_defaults(fn=cmd_paper)
+
+    s = sub.add_parser("ledger", help="the only supported writer for data/paper_ledger.json")
+    ls = s.add_subparsers(dest="ledger_cmd", required=True)
+    lo = ls.add_parser("open", help="record a paper entry in open_positions")
+    lo.add_argument("--contract", required=True, help='e.g. "SPY 767C 2026-09-09"')
+    lo.add_argument("--instrument-id", required=True, dest="instrument_id")
+    lo.add_argument("--qty", type=int, required=True)
+    lo.add_argument("--fill", type=float, required=True, help="modeled fill, per share")
+    lo.add_argument("--date", default=None, help="date_opened YYYY-MM-DD (default: today ET)")
+    lo.add_argument("--note", default=None)
+    lo.add_argument("--ledger", default="data/paper_ledger.json")
+    lo.add_argument("--config", default="config/strategy.yaml")
+    lo.set_defaults(fn=cmd_ledger_open)
+    lc = ls.add_parser("close", help="move an open position to realized")
+    g = lc.add_mutually_exclusive_group(required=True)
+    g.add_argument("--instrument-id", dest="instrument_id")
+    g.add_argument("--contract")
+    lc.add_argument("--exit", type=float, required=True,
+                    help="modeled exit, per share — trigger price for an intraday cross, "
+                         "first available print for a gap-through (journal convention)")
+    lc.add_argument("--reason", required=True, choices=LEDGER_CLOSE_REASONS)
+    lc.add_argument("--qualifier", default=None,
+                    help='appended in parentheses, e.g. "GAPPED THROUGH" or "RETROACTIVE - wake gap"')
+    lc.add_argument("--date-closed", default=None, dest="date_closed",
+                    help="YYYY-MM-DD (default: today ET)")
+    lc.add_argument("--note", default=None,
+                    help="replaces the open row's note (default: the open row's note carries over)")
+    lc.add_argument("--ledger", default="data/paper_ledger.json")
+    lc.add_argument("--config", default="config/strategy.yaml")
+    lc.set_defaults(fn=cmd_ledger_close)
 
     s = sub.add_parser("stops")
     s.add_argument("--fill", type=float, required=True, help="avg fill, per share")

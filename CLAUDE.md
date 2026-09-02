@@ -36,10 +36,13 @@ it changed.
      real `buying_power` is low — on paper there is nothing to fund.
   2. **Paper equity compounds** (owner, 2026-08-17: "embed the P&L on to the paper
      balance"). `data/paper_ledger.json` holds the $11,858.54 starting snapshot plus one
-     row per realized paper trade; equity = start + realized. **Append a row the moment
-     a paper position closes**, then re-run `paper`. Never hand-compute equity, never
-     edit or delete a settled row, and never re-apply the 2026-08-04 REAL trades — they
-     are already inside the starting balance.
+     row per realized paper trade; equity = start + realized. **Record every entry with
+     `strategy_calc.py ledger open` and every close with `strategy_calc.py ledger close`
+     in the same wake they happen** (added 2026-09-02 after three hand-edit drifts in
+     four sessions) — the command computes premium/P&L from the recorded fill, enforces
+     the slot and premium caps, and prints the updated `paper` summary. Never hand-edit
+     the JSON, never hand-compute equity, never edit or delete a settled row, and never
+     re-apply the 2026-08-04 REAL trades — they are already inside the starting balance.
   3. **Unrealized P&L never funds sizing.** `paper --mark <mid>` reports it for the
      journal; `sizing_budget_usd` excludes it by design. If equity ever reaches $0 the
      `paper` output carries a `HALT` field — stop entering.

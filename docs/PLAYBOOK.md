@@ -32,6 +32,10 @@ Every wake runs these six steps. `scripts/checkin.py` does the mechanical parts.
    `HH:MM open high low close volume` per line, UTC). Idempotent — safe to overlap.
 3. **Replay the interval.**
    `python3 scripts/checkin.py scan --date YYYY-MM-DD --symbol SPY --since HH:MM`
+   `--since` is **UTC** (add `--et` to give Eastern). Minutes before the 09:30 ET open
+   are skipped by default — pre-open the score is gap+premarket only, rescaled to full
+   weight, and never actionable (added 2026-09-02 after a UTC/ET slip replayed from
+   05:58 ET and printed 44 pre-open "crossings").
    Prints every minute at/over `entry_threshold` and exits 2 if any. A crossing plus
    a complete persistence run can begin and end inside one 5-min interval, so this is
    the check that makes a slower poll safe. **Before `entry_latest` a crossing is
@@ -195,6 +199,11 @@ Run **the check-in** every 5 min. On a crossing:
    NOT fall back to `gfd` — close the position and journal the rejection.
    **A position must never sit without a working stop for more than one wake.**
 6. Journal: contract, qty, fill, stop order id, score at entry, extremity row.
+7. **Record the paper position in the same wake (dry_run):**
+   `strategy_calc.py ledger open --contract "<contract>" --instrument-id <id> --qty N --fill F`
+   It appends the `open_positions` row (premium computed, slot and premium cap
+   enforced) and prints the updated `paper` summary. **Never hand-edit
+   `data/paper_ledger.json`** — see Changelog 2026-09-02.
 
 ## Phase 4 — Monitoring (market hours, every 5 min)
 
@@ -221,6 +230,13 @@ Run **the check-in**. Exits, in priority order:
    closed at 13:30 ET (it would expire) and stop tracking it that day.
 8. **Signal-decay (record, never act).** Per the check-in, every wake. It must not change
    any exit decision — the real exits are the five above plus the Phase 5 carry gate.
+9. **Whenever a position closes, for any reason, record it in the same wake:**
+   `strategy_calc.py ledger close --instrument-id <id> --exit X --reason <take_profit|stop|
+   eod_carry_gate|time_stop|dte_floor|daily_halt> [--qualifier "GAPPED THROUGH"]`
+   `--exit` follows the journal convention (trigger price for an intraday cross, first
+   available print for a gap-through). The command moves the row to `realized`, computes
+   P&L from the recorded fill, clears the slot, and prints the updated `paper` summary —
+   quote that figure in the journal rather than one computed by hand.
 
 ## Phase 5 — EOD verification (15:45 ET)
 
@@ -238,7 +254,8 @@ ones too weak to.
       width). **Mid ≤ floor → CLOSE now** (cancel stop, bid-pegged limit, re-peg every
       2 min, flat before 16:00): too little cushion against an overnight gap through the
       trigger. Above → carry with the GTC stop. Journal the decision either way, every day
-      a position is open at 15:45. In dry_run, journal the hypothetical close.
+      a position is open at 15:45. In dry_run, journal the hypothetical close and record
+      it with `strategy_calc.py ledger close ... --reason eod_carry_gate` (Phase 4 step 9).
       **Carry-cushion diagnostic (added 2026-08-22, see
       `logs/analysis/2026-08-22_weekly_review.md`):** when carrying, journal the cushion
       in dollars (`mid − eod_carry_floor`) explicitly next to the decision. This is what
@@ -299,6 +316,17 @@ flat by: · realized P&L: $X · trades: N/6 · deviations:
 Full rationale is in git history and `logs/analysis/`; kept short here so the runbook
 stays readable.
 
+- **2026-09-02 — paper ledger is written only by `strategy_calc.py ledger open|close`**
+  (Phase 3 step 7, Phase 4 step 9, Phase 5 step 1c). Three of the four sessions from
+  8/31 to 9/2 drifted `data/paper_ledger.json` by hand-editing it: `open_positions`
+  left empty at entry twice, a required field dropped in a later edit pass once, and a
+  malformed JSON fragment on 9/1. The command computes premium and P&L from the recorded
+  fill, enforces `max_concurrent_positions` and `max_premium_per_trade_usd`, writes
+  atomically, is append-only on settled rows, and prints the `paper` summary the
+  journal should quote. Same day: `checkin.py scan` now skips pre-open minutes unless
+  `--include-premarket` and accepts `--et`, after a UTC/ET slip in `--since` replayed
+  from 05:58 ET and printed 44 pre-open "crossings" that were briefly misread as a
+  scoring bug (they were real early-premarket prices scored on two components).
 - **2026-08-28 — re-entry distance diagnostic added** (Phase 3 step 2g, journal
   template): log `strategy_calc.py reentry-distance` (`extended_pct`, minutes since
   the day's first entry) at every same-day re-entry. Motivated by the day's first

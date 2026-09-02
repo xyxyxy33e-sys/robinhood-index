@@ -23,16 +23,39 @@ crossing plus a complete persistence run can begin and end inside one interval,
 so the endpoint score alone is not sufficient. It prints every minute whose
 |score| >= threshold and exits non-zero if any crossing is found, so a wake can
 branch on it.
+
+`--since` is UTC (matching the bar timestamps). Pass `--et` to give it in
+Eastern instead. Minutes before the 09:30 ET open are skipped unless
+`--include-premarket`: pre-open the score is gap + premarket only, rescaled to
+full weight, so it swings hard on thin early tape and is never actionable
+(entries open 09:45 ET). On 2026-09-02 a `--since 09:58` meant as ET replayed
+from 05:58 ET and printed 44 "crossings" at 06:00-07:10 ET — real prices, real
+math, but noise for the purpose of the check. This guard stops that.
 """
 import argparse
 import json
 import subprocess
 import sys
+from datetime import datetime, time, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 ROOT = Path(__file__).resolve().parent.parent
 CALC = ROOT / "scripts" / "strategy_calc.py"
 CONFIG = ROOT / "config" / "strategy.yaml"
+ET = ZoneInfo("America/New_York")
+
+
+def et_to_utc_hhmm(date, hhmm):
+    """'HH:MM' Eastern on `date` -> 'HH:MM' UTC (DST-aware)."""
+    d = datetime.strptime(date, "%Y-%m-%d").date()
+    h, m = (int(x) for x in hhmm.split(":"))
+    return datetime.combine(d, time(h, m), tzinfo=ET).astimezone(timezone.utc).strftime("%H:%M")
+
+
+def regular_open_utc(date):
+    """UTC 'HH:MM' of the 09:30 ET open on `date` (13:30Z in EDT, 14:30Z in EST)."""
+    return et_to_utc_hhmm(date, "09:30")
 
 
 def bars_path(date):
@@ -94,10 +117,17 @@ def cmd_merge(args):
 
 def cmd_scan(args):
     doc = load(args.date)
+    since = et_to_utc_hhmm(args.date, args.since) if args.et else args.since
+    open_utc = regular_open_utc(args.date)
+    if since < open_utc and not args.include_premarket:
+        print(f"note: --since {since}Z is before the 09:30 ET open ({open_utc}Z); replaying from "
+              f"the open. Pre-open minutes score on gap+premarket only and are never actionable "
+              f"-- pass --include-premarket to see them anyway.")
+        since = open_utc
     minutes = sorted({b["t"][11:16] for b in doc["symbols"][args.symbol]["bars"]})
-    window = [m for m in minutes if m >= args.since]
+    window = [m for m in minutes if m >= since]
     if not window:
-        sys.exit(f"no bars at/after {args.since}")
+        sys.exit(f"no bars at/after {since}Z")
     rows, crossings, threshold = [], [], None
     for m in window:
         s, threshold = score_at(doc, m, args.symbol)
@@ -111,7 +141,8 @@ def cmd_scan(args):
     if crossings:
         print(f"*** {len(crossings)} MINUTE(S) AT/OVER THRESHOLD ***")
         for m, s in crossings:
-            print(f"    {m}Z  {s:+.1f}")
+            tag = "  (pre-open, not actionable)" if m < open_utc else ""
+            print(f"    {m}Z  {s:+.1f}{tag}")
         print("-> run: strategy_calc.py persistence --input data/"
               f"{args.date}-bars.json --symbol {args.symbol}")
         print("-> then check the entry time against entry_latest before acting")
@@ -150,7 +181,10 @@ def main():
     s = sub.add_parser("scan", help="per-minute score replay over an interval")
     s.add_argument("--date", required=True)
     s.add_argument("--symbol", default="SPY")
-    s.add_argument("--since", required=True, help="UTC HH:MM to replay from")
+    s.add_argument("--since", required=True, help="HH:MM to replay from (UTC unless --et)")
+    s.add_argument("--et", action="store_true", help="interpret --since as Eastern time")
+    s.add_argument("--include-premarket", action="store_true", dest="include_premarket",
+                   help="also replay minutes before the 09:30 ET open (never actionable)")
     s.set_defaults(fn=cmd_scan)
 
     e = sub.add_parser("exits", help="stop/TP/carry check against interval high-low")
@@ -165,7 +199,11 @@ def main():
     e.set_defaults(fn=cmd_exits)
 
     args = ap.parse_args()
-    args.fn(args)
+    try:
+        args.fn(args)
+    except BrokenPipeError:  # e.g. `scan ... | head` — not an error worth a traceback
+        sys.stderr.close()
+        sys.exit(0)
 
 
 if __name__ == "__main__":
