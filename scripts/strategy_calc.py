@@ -105,6 +105,16 @@ rvol --closes C1,C2,C3,...
     delivering. Recorded at every signal so the hypothesis can be tested on live
     forward data — historical IV is not available through the Robinhood tools.
 
+context --date D --prior-close P [--input raw.json] [--target-expiry YYYY-MM-DD]
+    DIAGNOSTIC ONLY (added 2026-09-17, owner request "use any data you need").
+    Normalises the external pre-open context — Webull overnight-session range,
+    capital flow, QQQ NOII; Kalshi-style Fed/CPI odds + release dates; Alpha
+    Vantage put/call; Public.com intraday VIX — into data/<date>-context.json and
+    a journal record. Inputs arrive as raw JSON on stdin (the agent fetches, this
+    normalises — same split as checkin.py merge). Absent sources are null, never
+    estimated. Nothing here gates anything: the overnight session tested null
+    (logs/backtest/overnight_session_test.md); the rest is forward evidence only.
+
 reentry-distance --first-entry-price P --reentry-price P --direction call|put [--minutes-elapsed N]
     DIAGNOSTIC ONLY (added 2026-08-28) — never gates the re-entry decision, see
     docs/STRATEGY.md "Re-entry distance diagnostic". Run this at every same-day
@@ -662,6 +672,78 @@ def cmd_persistence(args):
     print(json.dumps(out, indent=2))
 
 
+def cmd_context(args):
+    """DIAGNOSTIC ONLY (added 2026-09-17). One normalised record per day of the
+    external pre-open inputs. Every source is optional and reported null when
+    absent — never estimated. Writes data/<date>-context.json."""
+    raw = json.load(open(args.input)) if args.input else json.load(sys.stdin)
+    pc = args.prior_close
+    out = {
+        "date": args.date,
+        "prior_close": pc,
+        "note": ("DIAGNOSTIC ONLY - journal it; nothing here gates entries or exits. "
+                 "See logs/analysis/2026-09-17_external_data_review.md"),
+    }
+    ov = raw.get("overnight")  # SPY 20:00-03:59 ET ATS session: close/high/low/volume
+    out["overnight"] = None if not ov else {
+        "close_pct": round(pct(ov["close"], pc), 2),
+        "range_pct": round((ov["high"] - ov["low"]) / pc * 100, 2),
+        "volume": ov.get("volume"),
+    }
+    pm = raw.get("premarket")  # last pre-open print (~09:29 ET)
+    out["premarket"] = None if not pm else {
+        "close_pct": round(pct(pm["close"], pc), 2),
+        "leg_from_overnight_pct": round(pct(pm["close"], ov["close"]), 2) if ov else None,
+    }
+    cf = raw.get("capital_flow")  # Webull daily large/medium/small in/out, USD
+    if cf:
+        li, lo = float(cf["large_in"]), float(cf["large_out"])
+        out["capital_flow"] = {
+            "date": cf.get("date"),
+            "large_net_ratio": round((li - lo) / (li + lo), 3) if li + lo else None,
+            "large_in_usd_m": round(li / 1e6, 1),
+            "large_out_usd_m": round(lo / 1e6, 1),
+        }
+    else:
+        out["capital_flow"] = None
+    pcr = raw.get("put_call")  # {"full_chain": x, "by_expiration": {date: value}}
+    out["put_call"] = None if not pcr else {
+        "full_chain": pcr.get("full_chain"),
+        "target_expiry": args.target_expiry,
+        "target_expiry_ratio": (pcr.get("by_expiration") or {}).get(args.target_expiry),
+    }
+    out["fed"] = raw.get("fed")  # {"meeting": date, "hike_25": p, "hold": p, "cut_25": p}
+    out["macro_calendar"] = raw.get("macro_calendar")  # [{"series": .., "release_date": ..}]
+    no = raw.get("noii_qqq")  # QQQ opening-cross imbalance; SPY's own NOII is empty (NYSE Arca)
+    if no:
+        paired, imb = float(no.get("paired_shares") or 0), float(no.get("imbalance_shares") or 0)
+        out["noii_qqq"] = {
+            "action": no.get("action"),
+            "side_code": no.get("side"),  # Webull code, mapping undocumented - logged raw
+            "paired_shares": paired,
+            "imbalance_shares": imb,
+            "imbalance_ratio": round(imb / paired, 3) if paired else None,
+            "ref_price": no.get("ref_price"),
+            "near_price": no.get("near_price"),
+        }
+    else:
+        out["noii_qqq"] = None
+    vx = raw.get("vix")  # {"t0900": x, "t0929": y} from 5-min VIX index bars
+    if vx and vx.get("t0900") and vx.get("t0929"):
+        out["vix_intraday"] = {
+            "t0900": vx["t0900"], "t0929": vx["t0929"],
+            "delta": round(vx["t0929"] - vx["t0900"], 2),
+            "pct": round(pct(vx["t0929"], vx["t0900"]), 2),
+        }
+    else:
+        out["vix_intraday"] = None
+    path = f"{args.out_dir.rstrip('/')}/{args.date}-context.json"
+    with open(path, "w") as fh:
+        json.dump(out, fh, indent=2)
+    out["written"] = path
+    print(json.dumps(out, indent=2))
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -761,6 +843,15 @@ def main():
     lc.add_argument("--ledger", default="data/paper_ledger.json")
     lc.add_argument("--config", default="config/strategy.yaml")
     lc.set_defaults(fn=cmd_ledger_close)
+
+    s = sub.add_parser("context", help="DIAGNOSTIC: normalise external pre-open context (added 2026-09-17)")
+    s.add_argument("--date", required=True, help="YYYY-MM-DD")
+    s.add_argument("--prior-close", type=float, required=True, dest="prior_close")
+    s.add_argument("--input", default=None, help="raw JSON file (default: stdin)")
+    s.add_argument("--target-expiry", default=None, dest="target_expiry",
+                   help="the ~7DTE expiry to report from put_call.by_expiration")
+    s.add_argument("--out-dir", default="data", dest="out_dir")
+    s.set_defaults(fn=cmd_context)
 
     s = sub.add_parser("stops")
     s.add_argument("--fill", type=float, required=True, help="avg fill, per share")

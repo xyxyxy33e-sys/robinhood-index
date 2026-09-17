@@ -121,6 +121,17 @@ alongside points because a fixed point move means something very different at a 
 baseline (10s) than a high one (30s+). Logged, not gating — same discipline as the
 velocity/acceleration diagnostics above: build forward evidence before proposing a rule.
 
+**External context (diagnostic only, added 2026-09-17).** Overnight-session range,
+Fed/CPI event-contract odds and release dates, put/call ratio, large-order capital
+flow, intraday VIX and the QQQ opening imbalance are recorded once a day by
+`strategy_calc.py context` (`docs/PLAYBOOK.md` Phase 1 step 1c). None of it gates a
+trade. The only piece that could be backtested — the 20:00–04:00 ET overnight move as a
+pre-open read — was tested on Jun–Sep 2026 (n=52) and carries no directional
+information (`logs/backtest/overnight_session_test.md`); the same test shows the
+gap/premarket snapshot itself has ~0 raw correlation with the subsequent drive,
+consistent with the edge (if any) living in the persistence-gated intraday drive.
+Source audit: `logs/analysis/2026-09-17_external_data_review.md`.
+
 ## Entry rules
 
 1. Time gate: `entry_earliest` (09:45) ≤ now ≤ 11:30 ET. 9:35, 9:45, 9:50 and 10:00

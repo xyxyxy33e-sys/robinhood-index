@@ -115,6 +115,23 @@ mode: dry_run|live
    `--minutes-elapsed 1` means "one day-step", NOT one minute — passing 1440 dilutes the
    rate so nothing ever flags. Journal level, change, accel, pct. Rationale lives in
    config next to `vix_change_watch_pts_per_day`.
+1c. **External context (diagnostic, added 2026-09-17).** One raw JSON, one command, one
+   journal line — nothing here gates anything (audit and rationale:
+   `logs/analysis/2026-09-17_external_data_review.md`). Gather: Webull
+   `get_stock_snapshot` SPY (`extend_hour_required` + `overnight_required` →
+   `ovn_high/ovn_low/ovn_price/ovn_volume`, `extend_hour_last_price`); Webull
+   `get_stock_capital_flow` SPY `category=US_STOCK` (latest row); Webull
+   `get_event_snapshot` on the next `KXFEDDECISION-<mtg>-H25` / `-H0` / `-C25` and
+   `get_event_instruments` for `KXCPI` / `KXPAYROLLS` (`expected_exp_date` = release
+   date); Alpha Vantage `REALTIME_PUT_CALL_RATIO` SPY (free tier — one call per day);
+   VIX at ~09:00 and ~09:28 ET from the Robinhood `get_index_quotes` reads already taken
+   in steps 1/3 (Public.com `get_price_history` VIX `instrument_type=INDEX` gives 5-min
+   bars but only from 09:30 — use it for intraday VIX during Phase 4, not here). Then
+   `strategy_calc.py context --date D --prior-close P --target-expiry <7DTE expiry> < raw.json`
+   → `data/D-context.json`; copy the printed headline numbers into the journal's
+   *External context* line. A source that is down is logged `null` — never backfilled
+   from memory. The overnight session itself tested null as a signal
+   (`logs/backtest/overnight_session_test.md`); it is recorded for the forward series only.
 2. Poll SPY/QQQ/IWM minute bars (`bounds=extended`, from 09:00 ET). Each poll returns
    the full tape since 9:00, so polling every ~7 min gives complete coverage.
 2b. **Volatility baseline (every day, traded or not).** 21 daily SPY closes →
@@ -129,6 +146,12 @@ mode: dry_run|live
 Wake ~9:37 and ~9:44. Refresh bars, re-run the score, journal the evolution. **No orders.**
 If `|score| >= entry_threshold` fires before `entry_earliest`, it is still a real signal —
 log an extremity row with status `blocked - time gate` (columns per Phase 3 step 2d).
+
+**QQQ opening imbalance (diagnostic, added 2026-09-17; needs Webull LV2).** At ~09:28 ET,
+`get_stock_noii_snapshot` QQQ `category=US_STOCK` `imbalance_action_type=PRE_OPEN` → add
+it as `noii_qqq` to the day's `context` input and re-run `strategy_calc.py context`.
+SPY's own NOII is structurally empty (NYSE Arca listing; the opening cross is not on
+Nasdaq), so QQQ is the proxy. Journal-only, never acted on.
 
 ## Phase 3 — Entry (entry_earliest 9:45 → entry_latest 11:30)
 
@@ -284,6 +307,8 @@ mode: <dry_run|live> | settled cash at open: $X | VIX: X (prior close X, Δ X pt
 gap SPY: X% · news veto: none|<reason> · VIX X < 35 · tradeable: yes|no
 ## Volatility baseline
 VIX: X · rv5: X% · rv10: X% · rv20: X%
+## External context (diagnostic)
+overnight: X% (range X%, vol X) · premarket leg: X% · P/C: X (7DTE X) · large-flow net: X · Fed next mtg: hike X / hold X / cut X · next CPI/NFP: date · VIX 09:00→09:29: X · QQQ NOII 09:28: side X, imb/paired X
 ## Signal history
 | time | SPY | QQQ | IWM | market | note |
 ## Wake delivery log
@@ -316,6 +341,14 @@ flat by: · realized P&L: $X · trades: N/6 · deviations:
 Full rationale is in git history and `logs/analysis/`; kept short here so the runbook
 stays readable.
 
+- **2026-09-17 — external-context diagnostic added** (Phase 1 step 1c, Phase 2 QQQ NOII
+  line, `strategy_calc.py context`), on the owner's "use any data you need". Webull,
+  Public.com, Alpha Vantage and co-invest were audited endpoint by endpoint
+  (`logs/analysis/2026-09-17_external_data_review.md`). The one new series that could
+  be tested — SPY's 20:00–04:00 ET overnight session — is **null** on Jun–Sep 2026
+  (n=52, `logs/backtest/overnight_session_test.md`; a look-ahead bug in the first pass
+  was caught before write-up). No config, score or gate change. ES futures, footprint
+  and NOII history remain subscription-gated on Webull.
 - **2026-09-02 — paper ledger is written only by `strategy_calc.py ledger open|close`**
   (Phase 3 step 7, Phase 4 step 9, Phase 5 step 1c). Three of the four sessions from
   8/31 to 9/2 drifted `data/paper_ledger.json` by hand-editing it: `open_positions`
